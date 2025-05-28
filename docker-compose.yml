@@ -4,7 +4,7 @@ services:
   bmo-serveur:
     build:
       context: .
-      dockerfile: Dockerfile.serveur
+      dockerfile: bmo-serveur/Dockerfile.serveur
     ports:
       - "8080:8080"
     environment:
@@ -15,7 +15,7 @@ services:
   bmo-client:
     build:
       context: .
-      dockerfile: Dockerfile.client
+      dockerfile: bmo-client/Dockerfile.client
     depends_on:
       - bmo-serveur
     environment:
