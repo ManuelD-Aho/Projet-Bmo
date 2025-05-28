@@ -1,8 +1,6 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -11,15 +9,50 @@
         <version>1.0.0</version>
     </parent>
 
-    <artifactId>bmo-commun</artifactId>
+    <artifactId>bmo-commun</artifactId> <!-- Artefact ID spécifique à ce module -->
+    <packaging>jar</packaging> <!-- Ce module produit un JAR -->
+
     <name>BMO Commun</name>
-    <description>Module commun contenant les DTOs et utilitaires partagés</description>
+    <description>Module commun contenant les DTOs, exceptions, constantes et utilitaires partagés pour BMO</description>
 
     <dependencies>
+        <!-- Aucune dépendance spécifique de runtime listée dans le fichier fourni, -->
+        <!-- mais on pourrait avoir des annotations de validation ou des bibliothèques utilitaires ici. -->
+        <!-- Par exemple, si on utilise des annotations de validation standard : -->
+        <!--
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <version>3.0.2</version>
+        </dependency>
+        -->
+
+        <!-- Dépendances de Test (hérite la version de JUnit du parent) -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <!-- La configuration (source/target Java 17) est héritée du parent -->
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <!-- Configuration pour exécuter les tests JUnit 5 -->
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

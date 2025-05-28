@@ -1,60 +1,148 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>akandan.bahou.kassy</groupId>
     <artifactId>bmo</artifactId>
     <version>1.0.0</version>
-    <packaging>pom</packaging>
+    <packaging>pom</packaging> <!-- Important: Ce POM est un parent, il package les modules -->
 
-    <name>BMO - Business Meeting Organizer</name>
-    <description>Application de gestion de réunions d'entreprise</description>
+    <name>BMO Project</name>
+    <description>Business Meeting Organizer - Projet multi-modules</description>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring.boot.version>2.7.0</spring.boot.version>
-        <javafx.version>17.0.2</javafx.version>
-        <junit.version>5.8.2</junit.version>
+        <maven.compiler.source>17</maven.compiler.source> <!-- Java 17 -->
+        <maven.compiler.target>17</maven.compiler.target>
+        <javafx.version>17.0.10</javafx.version> <!-- Version de JavaFX, ex: 17.0.10 ou plus récent -->
+        <spring-boot.version>3.2.5</spring-boot.version> <!-- Version de Spring Boot, ex: 3.2.5 -->
+        <junit.jupiter.version>5.10.2</junit.jupiter.version> <!-- Version de JUnit 5 -->
+        <logback.version>1.4.14</logback.version> <!-- Version de Logback -->
+        <!-- Autres versions de dépendances communes -->
     </properties>
 
     <modules>
         <module>bmo-commun</module>
-        <module>bmo-serveur</module>
         <module>bmo-client</module>
+        <module>bmo-serveur</module>
     </modules>
 
-    <dependencyManagement>
+    <dependencyManagement> <!-- Gestion centralisée des versions des dépendances -->
         <dependencies>
+            <!-- Spring Boot Bill of Materials (BOM) -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring.boot.version}</version>
+                <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
+            <!-- Dépendances partagées par plusieurs modules -->
+            <dependency>
+                <groupId>akandan.bahou.kassy</groupId>
+                <artifactId>bmo-commun</artifactId>
+                <version>${project.version}</version> <!-- Utilise la version du projet parent -->
+            </dependency>
+
+            <!-- JavaFX -->
+            <dependency>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-controls</artifactId>
+                <version>${javafx.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-fxml</artifactId>
+                <version>${javafx.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-graphics</artifactId>
+                <version>${javafx.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-base</artifactId>
+                <version>${javafx.version}</version>
+            </dependency>
+
+            <!-- Logging -->
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>2.0.9</version> <!-- Assurez-vous de la compatibilité -->
+            </dependency>
+
+            <!-- Tests -->
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
-                <artifactId>junit-jupiter</artifactId>
-                <version>${junit.version}</version>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>${junit.jupiter.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>${junit.jupiter.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency> <!-- Pour les tests paramétrés si besoin -->
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-params</artifactId>
+                <version>${junit.jupiter.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
-        <pluginManagement>
+        <pluginManagement> <!-- Gestion centralisée des versions des plugins -->
             <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.5</version>
+                </plugin>
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
-                    <version>${spring.boot.version}</version>
+                    <version>${spring-boot.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.openjfx</groupId>
+                    <artifactId>javafx-maven-plugin</artifactId>
+                    <version>0.0.8</version> <!-- Vérifiez la dernière version stable -->
+                </plugin>
+                <!-- Plugin pour créer un JAR exécutable "uber-jar" si nécessaire (alternative à Spring Boot plugin ou JavaFX plugin pour certains cas) -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.5.2</version>
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins> <!-- Plugins à exécuter pour le POM parent (généralement peu) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
+
 </project>
