@@ -1,5 +1,10 @@
 package akandan.bahou.kassy.commun.modele;
 
-public class StatutParticipationReunion {
-    // TODO: Implement StatutParticipationReunion
+public enum StatutParticipationReunion {
+    INVITE,
+    ACCEPTE,
+    REFUSE,
+    REJOINT,
+    PARTI,
+    EXCLU
 }
