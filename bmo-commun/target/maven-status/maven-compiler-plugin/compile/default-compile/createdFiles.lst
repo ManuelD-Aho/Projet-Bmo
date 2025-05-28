@@ -1,0 +1,8 @@
+akandan\bahou\kassy\commun\exceptions\ExceptionOperationInvalide.class
+akandan\bahou\kassy\commun\utilitaires\ConstantesProtocole.class
+akandan\bahou\kassy\commun\dto\ReunionDTO.class
+akandan\bahou\kassy\commun\dto\UtilisateurDTO.class
+akandan\bahou\kassy\commun\dto\MessageChatDTO.class
+akandan\bahou\kassy\commun\exceptions\ExceptionAuthentification.class
+akandan\bahou\kassy\commun\utilitaires\ValidateurEntree.class
+akandan\bahou\kassy\commun\dto\ReponseServeurDTO.class
