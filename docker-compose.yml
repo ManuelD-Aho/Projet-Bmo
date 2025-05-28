@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  bmo-serveur:
+    build:
+      context: .
+      dockerfile: Dockerfile.serveur
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - bmo-network
+
+  bmo-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    depends_on:
+      - bmo-serveur
+    environment:
+      - DISPLAY=${DISPLAY}
+      - BMO_SERVEUR_HOST=bmo-serveur
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    networks:
+      - bmo-network
+
+networks:
+  bmo-network:
+    driver: bridge
