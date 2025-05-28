@@ -1,31 +1,77 @@
 version: '3.8'
 
+# Ce fichier docker-compose orchestre les services de l'application BMO.
+
 services:
+  bmo-db:
+    image: mysql:8.0
+    container_name: bmo_mysql_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: MotDePasseRootFort! # Identifiant root pour MySQL
+      MYSQL_DATABASE: bmo_base_de_donnees
+      MYSQL_USER: bmo_utilisateur_app
+      MYSQL_PASSWORD: MotDePasseUtilisateurAppFort!
+    ports:
+      - "3306:3306"
+    volumes:
+      - bmo_db_volume:/var/lib/mysql
+    networks:
+      - bmo_app_reseau
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: bmo_phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      - bmo-db
+    ports:
+      - "8081:80" # Port 8081 sur l'hôte pour éviter conflit
+    environment:
+      PMA_HOST: bmo-db
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: MotDePasseRootFort! # Accès root pour PhpMyAdmin
+    networks:
+      - bmo_app_reseau
+
   bmo-serveur:
     build:
       context: .
-      dockerfile: bmo-serveur/Dockerfile.serveur
+      dockerfile: Dockerfile.serveur
+    container_name: bmo_app_serveur
+    restart: unless-stopped
+    depends_on:
+      - bmo-db
     ports:
-      - "8080:8080"
+      - "5000:5000" # Port applicatif du serveur BMO
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
+      DB_URL: jdbc:mysql://bmo-db:3306/bmo_base_de_donnees?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: bmo_utilisateur_app
+      DB_PASSWORD: MotDePasseUtilisateurAppFort!
+      # D'autres variables d'environnement pour la configuration du serveur peuvent être ajoutées ici
+      # Exemple : SERVER_LOG_LEVEL: INFO
     networks:
-      - bmo-network
+      - bmo_app_reseau
 
   bmo-client:
     build:
       context: .
-      dockerfile: bmo-client/Dockerfile.client
+      dockerfile: Dockerfile.client
+    container_name: bmo_app_client
+    restart: "no" # Le client GUI n'a généralement pas besoin de redémarrer automatiquement
     depends_on:
       - bmo-serveur
     environment:
-      - DISPLAY=${DISPLAY}
-      - BMO_SERVEUR_HOST=bmo-serveur
+      - DISPLAY=${DISPLAY} # Nécessaire pour X11 forwarding
+
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw # Montage du socket X11 pour l'affichage GUI
     networks:
-      - bmo-network
+      - bmo_app_reseau
 
 networks:
-  bmo-network:
+  bmo_app_reseau:
     driver: bridge
+
+volumes:
+  bmo_db_volume: # Volume pour la persistance des données MySQL

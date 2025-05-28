@@ -1,8 +1,18 @@
-FROM openjdk:17-jre-slim
+FROM openjdk:17-jdk-slim
 
-WORKDIR /app
-COPY bmo-serveur/target/bmo-serveur-1.0.0.jar app.jar
+ARG JAR_FILE=bmo-serveur/target/bmo-serveur-*.jar
+ARG APP_PORT=5000
 
-EXPOSE 8080
+WORKDIR /opt/bmo
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+COPY ${JAR_FILE} app-serveur.jar
+
+EXPOSE ${APP_PORT}
+
+# Commande pour exécuter l'application serveur
+ENTRYPOINT ["java", "-jar", "app-serveur.jar"]
+
+# Ce Dockerfile construit l'image pour le serveur BMO.
+# Il utilise une image de base OpenJDK 17 légère.
+# Le JAR de l'application serveur est copié dans l'image.
+# Le port applicatif est exposé, configurable via l'argument APP_PORT.

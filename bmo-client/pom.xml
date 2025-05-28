@@ -6,24 +6,19 @@
     <parent>
         <groupId>akandan.bahou.kassy</groupId>
         <artifactId>bmo</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>bmo-client</artifactId>
-    <packaging>jar</packaging>
-
-    <name>BMO Client</name>
-    <description>Client JavaFX pour BMO</description>
+    <name>BMO :: Client</name>
+    <description>Module client JavaFX de l'application BMO.</description>
 
     <dependencies>
-        <!-- Dépendance vers le module commun -->
         <dependency>
             <groupId>akandan.bahou.kassy</groupId>
             <artifactId>bmo-commun</artifactId>
-            <!-- La version est gérée par le dependencyManagement du parent -->
+            <version>${project.version}</version>
         </dependency>
-
-        <!-- Dépendances JavaFX (versions gérées par le parent) -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -32,22 +27,10 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
         </dependency>
-        <dependency> <!-- Peut être nécessaire pour certains éléments graphiques -->
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-graphics</artifactId>
-        </dependency>
-        <dependency> <!-- Base pour JavaFX -->
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-base</artifactId>
-        </dependency>
-
-        <!-- Logging (version gérée par le parent) -->
         <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
         </dependency>
-
-        <!-- Tests (version gérée par le parent) -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
@@ -65,61 +48,40 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <!-- La configuration est héritée du parent, mais on peut la surcharger si besoin -->
             </plugin>
             <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>
-                <!-- Version gérée par le pluginManagement du parent -->
-                <configuration>
-                    <mainClass>akandan.bahou.kassy.client.AppPrincipale</mainClass>
-                    <!-- Options supplémentaires pour le build JavaFX si nécessaire -->
-                    <!-- Par exemple, pour créer un jlink image ou un native installer -->
-                </configuration>
+                <version>${javafx.maven.plugin.version}</version>
                 <executions>
                     <execution>
-                        <!-- Buts par défaut pour compiler et exécuter l'application JavaFX -->
+                        <!-- Default configuration for running with javafx:run -->
                         <id>default-cli</id>
-                        <goals>
-                            <goal>compile</goal>
-                            <goal>run</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin> <!-- Optionnel : Pour créer un "uber-jar" si javafx-maven-plugin ne suffit pas -->
-                <!-- Ou si vous ne voulez pas utiliser le système de modules Java pour le déploiement -->
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
                         <configuration>
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>akandan.bahou.kassy.client.AppPrincipaleLauncher</mainClass> <!-- Une classe launcher est souvent nécessaire pour JavaFX dans un uber-jar -->
-                                </transformer>
-                            </transformers>
-                            <filters> <!-- Pour éviter les conflits de signature si des dépendances sont signées -->
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
+                            <mainClass>akandan.bahou.kassy.client.coeur.AppPrincipale</mainClass>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
+            <!-- Alternative avec maven-shade-plugin si javafx-maven-plugin ne convient pas pour le packaging final -->
+            <!--
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <configuration>
+                    <transformers>
+                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                            <manifestEntries>
+                                <Main-Class>akandan.bahou.kassy.client.coeur.AppPrincipaleLauncher</Main-Class>
+                                <X-JavaFX-Main-Class>akandan.bahou.kassy.client.coeur.AppPrincipale</X-JavaFX-Main-Class>
+                            </manifestEntries>
+                        </transformer>
+                    </transformers>
+                    <finalName>${project.artifactId}-uber</finalName>
+                </configuration>
             </plugin>
+            -->
         </plugins>
     </build>
 </project>
