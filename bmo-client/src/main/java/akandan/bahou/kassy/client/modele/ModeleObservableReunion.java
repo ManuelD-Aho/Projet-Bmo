@@ -7,42 +7,46 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
 import akandan.bahou.kassy.commun.modele.StatutReunion;
 import akandan.bahou.kassy.commun.modele.TypeReunion;
 
 public class ModeleObservableReunion {
 
-    private final StringProperty id;
+    private final IntegerProperty id;
     private final StringProperty titre;
-    private final StringProperty description;
+    private final StringProperty description; // Le DTO utilise 'description', pas 'ordreDuJour' selon la dernière version.
     private final ObjectProperty<LocalDateTime> dateHeureDebut;
-    private final IntegerProperty dureeEstimeeMinutes;
+    private final IntegerProperty dureeEstimeeMinutes; // Corrigé: était dureeMinutes
     private final ObjectProperty<TypeReunion> typeReunion;
-    private final ObjectProperty<StatutReunion> statut;
-    private final StringProperty idOrganisateur; // Changé de idCreateur pour correspondre au DTO probable
-    private final StringProperty nomOrganisateur; // Changé de nomCreateur
+    private final ObjectProperty<StatutReunion> statutReunion;
+    private final IntegerProperty idOrganisateur;
+    private final StringProperty nomOrganisateur;
     private final IntegerProperty nombreParticipants;
 
     private DetailsReunionDTO detailsDTOOriginal;
+    // Pas besoin de formateur ici si les dates sont ObjectProperty<LocalDateTime>
+    // Le formatage se fera dans le CellValueFactory de la TableView
 
     public ModeleObservableReunion(DetailsReunionDTO dto) {
-        this.id = new SimpleStringProperty(String.valueOf(dto.getIdReunion())); // Supposant getIdReunion() et conversion en String
+        this.id = new SimpleIntegerProperty((int)dto.getIdReunion()); // Cast en int si l'ID est petit, sinon StringProperty
         this.titre = new SimpleStringProperty(dto.getTitre());
-        this.description = new SimpleStringProperty(dto.getDescription());
-        this.dateHeureDebut = new SimpleObjectProperty<>(dto.getDateHeureDebut());
+        this.description = new SimpleStringProperty(dto.getDescription()); // Utilise getDescription()
+        this.dateHeureDebut = new SimpleObjectProperty<>(dto.getDateHeureDebut()); // Supposant que le DTO a LocalDateTime
         this.dureeEstimeeMinutes = new SimpleIntegerProperty(dto.getDureeEstimeeMinutes());
         this.typeReunion = new SimpleObjectProperty<>(dto.getTypeReunion());
-        this.statut = new SimpleObjectProperty<>(dto.getStatutReunion());
-        this.idOrganisateur = new SimpleStringProperty(String.valueOf(dto.getIdOrganisateur()));
+        this.statutReunion = new SimpleObjectProperty<>(dto.getStatutReunion());
+        this.idOrganisateur = new SimpleIntegerProperty((int)dto.getIdOrganisateur());
         this.nomOrganisateur = new SimpleStringProperty(dto.getNomOrganisateur());
-        this.nombreParticipants = new SimpleIntegerProperty(dto.getNombreParticipants());
+        this.nombreParticipants = new SimpleIntegerProperty(dto.getNombreParticipants()); // Utilise le champ du DTO
         this.detailsDTOOriginal = dto;
     }
 
-    public StringProperty idProperty() { return id; }
-    public String getId() { return id.get(); }
-    public void setId(String id) { this.id.set(id); }
+    public IntegerProperty idProperty() { return id; }
+    public int getId() { return id.get(); }
+    public void setId(int id) { this.id.set(id); }
 
     public StringProperty titreProperty() { return titre; }
     public String getTitre() { return titre.get(); }
@@ -64,13 +68,13 @@ public class ModeleObservableReunion {
     public TypeReunion getTypeReunion() { return typeReunion.get(); }
     public void setTypeReunion(TypeReunion typeReunion) { this.typeReunion.set(typeReunion); }
 
-    public ObjectProperty<StatutReunion> statutProperty() { return statut; }
-    public StatutReunion getStatut() { return statut.get(); }
-    public void setStatut(StatutReunion statut) { this.statut.set(statut); }
+    public ObjectProperty<StatutReunion> statutReunionProperty() { return statutReunion; }
+    public StatutReunion getStatutReunion() { return statutReunion.get(); }
+    public void setStatutReunion(StatutReunion statutReunion) { this.statutReunion.set(statutReunion); }
 
-    public StringProperty idOrganisateurProperty() { return idOrganisateur; }
-    public String getIdOrganisateur() { return idOrganisateur.get(); }
-    public void setIdOrganisateur(String idOrganisateur) { this.idOrganisateur.set(idOrganisateur); }
+    public IntegerProperty idOrganisateurProperty() { return idOrganisateur; }
+    public int getIdOrganisateur() { return idOrganisateur.get(); }
+    public void setIdOrganisateur(int idOrganisateur) { this.idOrganisateur.set(idOrganisateur); }
 
     public StringProperty nomOrganisateurProperty() { return nomOrganisateur; }
     public String getNomOrganisateur() { return nomOrganisateur.get(); }
@@ -80,19 +84,20 @@ public class ModeleObservableReunion {
     public int getNombreParticipants() { return nombreParticipants.get(); }
     public void setNombreParticipants(int nombreParticipants) { this.nombreParticipants.set(nombreParticipants); }
 
+
     public DetailsReunionDTO getDetailsDTOOriginal() {
         return detailsDTOOriginal;
     }
 
     public void mettreAJourAvecDTO(DetailsReunionDTO dto) {
-        this.id.set(String.valueOf(dto.getIdReunion()));
+        this.id.set((int)dto.getIdReunion());
         this.titre.set(dto.getTitre());
         this.description.set(dto.getDescription());
         this.dateHeureDebut.set(dto.getDateHeureDebut());
         this.dureeEstimeeMinutes.set(dto.getDureeEstimeeMinutes());
         this.typeReunion.set(dto.getTypeReunion());
-        this.statut.set(dto.getStatutReunion());
-        this.idOrganisateur.set(String.valueOf(dto.getIdOrganisateur()));
+        this.statutReunion.set(dto.getStatutReunion());
+        this.idOrganisateur.set((int)dto.getIdOrganisateur());
         this.nomOrganisateur.set(dto.getNomOrganisateur());
         this.nombreParticipants.set(dto.getNombreParticipants());
         this.detailsDTOOriginal = dto;

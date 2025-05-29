@@ -14,21 +14,22 @@ import java.util.Optional;
 
 public class AlertesUtilisateur {
 
-    private static void configurerEtAfficherAlerte(Alert alerte, String titre, String message) {
-        alerte.setTitle(titre);
-        alerte.setHeaderText(null);
-        alerte.setContentText(message);
-        Stage stage = (Stage) alerte.getDialogPane().getScene().getWindow();
-        stage.setAlwaysOnTop(true);
-        alerte.showAndWait();
+    private AlertesUtilisateur() {
     }
 
-    private static void configurerAlerte(Alert alerte, String titre, String message) {
+    private static void configurerAlerteBase(Alert alerte, String titre, String message) {
         alerte.setTitle(titre);
         alerte.setHeaderText(null);
         alerte.setContentText(message);
         Stage stage = (Stage) alerte.getDialogPane().getScene().getWindow();
-        stage.setAlwaysOnTop(true);
+        if (stage != null) { // Le stage peut être null si l'alerte est affichée avant que la scène principale ne soit prête
+            stage.setAlwaysOnTop(true);
+        }
+    }
+
+    private static void configurerEtAfficherAlerte(Alert alerte, String titre, String message) {
+        configurerAlerteBase(alerte, titre, message);
+        alerte.showAndWait();
     }
 
     public static void afficherInformation(String titre, String message) {
@@ -48,7 +49,7 @@ public class AlertesUtilisateur {
 
     public static void afficherErreurAvecException(String titre, String message, Exception ex) {
         Alert alerte = new Alert(AlertType.ERROR);
-        configurerAlerte(alerte, titre, message);
+        configurerAlerteBase(alerte, titre, message);
 
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
@@ -66,7 +67,8 @@ public class AlertesUtilisateur {
 
         GridPane contenuDetaille = new GridPane();
         contenuDetaille.setMaxWidth(Double.MAX_VALUE);
-        contenuDetaille.add(new Label("La trace de l'exception était :"), 0, 0);
+        Label labelDetails = new Label("La trace de l'exception était :"); // Pas de i18n ici car c'est une classe utilitaire bas niveau
+        contenuDetaille.add(labelDetails, 0, 0);
         contenuDetaille.add(textArea, 0, 1);
 
         alerte.getDialogPane().setExpandableContent(contenuDetaille);
@@ -75,14 +77,9 @@ public class AlertesUtilisateur {
 
     public static boolean afficherConfirmation(String titre, String message) {
         Alert alerte = new Alert(AlertType.CONFIRMATION);
-        // Utilisation des boutons par défaut (OK, Annuler) car leurs textes sont généralement gérés par le système d'exploitation/JavaFX selon la locale.
-        // Si des textes spécifiques sont nécessaires (Oui/Non), il faudrait les définir explicitement :
-        // ButtonType boutonOui = new ButtonType("Oui", ButtonBar.ButtonData.YES);
-        // ButtonType boutonNon = new ButtonType("Non", ButtonBar.ButtonData.NO);
-        // alerte.getButtonTypes().setAll(boutonOui, boutonNon);
-        configurerAlerte(alerte, titre, message); // Ne pas appeler showAndWait ici
-
+        configurerAlerteBase(alerte, titre, message);
+        // Les boutons OK/Cancel sont standards et généralement localisés par JavaFX.
         Optional<ButtonType> resultat = alerte.showAndWait();
-        return resultat.isPresent() && resultat.get() == ButtonType.OK; // Ou boutonOui si défini explicitement
+        return resultat.isPresent() && resultat.get() == ButtonType.OK;
     }
 }
