@@ -28,6 +28,13 @@
             <artifactId>json</artifactId>
         </dependency>
 
+        <!-- Dépendance pour Logback Classic -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.4.14</version> <!-- Assurez-vous de la compatibilité avec SLF4J 2.x si utilisé -->
+        </dependency>
+
         <!-- Dépendances de Test (JUnit 5 et Mockito) supprimées -->
     </dependencies>
 
@@ -45,6 +52,16 @@
                         </transformer>
                     </transformers>
                     <createDependencyReducedPom>false</createDependencyReducedPom>
+                    <filters>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
                 </configuration>
             </plugin>
         </plugins>
