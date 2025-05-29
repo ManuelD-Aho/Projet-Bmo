@@ -1,5 +1,23 @@
 package akandan.bahou.kassy.client.controleur;
 
+import akandan.bahou.kassy.client.coeur.GestionnaireNavigation;
+import akandan.bahou.kassy.client.service.ServiceCommunicationServeur;
+import akandan.bahou.kassy.client.service.ServiceSessionUtilisateur;
+import akandan.bahou.kassy.client.util.AlertesUtilisateur;
+// ValidateurInterfaceGraphique n'est pas utilisé pour l'instant
+import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
+import akandan.bahou.kassy.commun.modele.TypeReunion;
+import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
+import akandan.bahou.kassy.commun.util.ExceptionValidation; // Pour ExceptionValidation
+import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List; // Ajout de l'import
+import java.util.ResourceBundle;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
@@ -13,37 +31,24 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.GridPane;
 import javafx.util.StringConverter;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.ResourceBundle;
-import akandan.bahou.kassy.client.coeur.GestionnaireNavigation;
-import akandan.bahou.kassy.client.service.ServiceCommunicationServeur;
-import akandan.bahou.kassy.client.service.ServiceSessionUtilisateur;
-import akandan.bahou.kassy.client.util.AlertesUtilisateur;
-import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
-import akandan.bahou.kassy.commun.modele.StatutReunion;
-import akandan.bahou.kassy.commun.modele.TypeReunion;
-import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
-import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur;
 import org.slf4j.Logger;
 
 public class ControleurPlanificationReunion implements ControleurAvecInitialisation {
 
-    @FXML private Label etiquetteTitreFenetrePlanification;
+    @FXML private Label etiquetteTitreFenetre;
     @FXML private TextField champTitreReunion;
     @FXML private TextArea champDescriptionReunion;
     @FXML private DatePicker datePickerDateDebut;
     @FXML private ComboBox<LocalTime> comboBoxHeureDebut;
     @FXML private Spinner<Integer> spinnerDureeMinutes;
     @FXML private ComboBox<TypeReunion> comboBoxTypeReunion;
-    @FXML private PasswordField champMotDePasseReunionOptionnel;
+    @FXML private GridPane grilleMotDePasse;
+    @FXML private Label etiquetteMotDePasseReunion;
+    @FXML private PasswordField champMotDePasseReunion;
     @FXML private Button boutonSauvegarderReunion;
-    @FXML private Button boutonAnnulerPlanification;
+    @FXML private Button boutonAnnuler;
     @FXML private Label etiquetteMessageErreurPlanification;
 
     private GestionnaireNavigation gestionnaireNavigation;
@@ -52,7 +57,7 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
     private ResourceBundle paquetRessourcesI18n;
     private DetailsReunionDTO reunionEnCoursModification;
     private static final Logger journal = EnregistreurEvenementsBMO.getLogger(ControleurPlanificationReunion.class);
-    private final DateTimeFormatter formateurHeure = DateTimeFormatter.ofPattern("HH:mm");
+    private final DateTimeFormatter formateurHeureCombo = DateTimeFormatter.ofPattern("HH:mm");
 
     public ControleurPlanificationReunion() {
     }
@@ -61,7 +66,7 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
     public void initialiserDonneesEtServices(GestionnaireNavigation gestionnaireNav, ServiceCommunicationServeur serviceComm, ServiceSessionUtilisateur serviceSess, ResourceBundle paquetRessources, Object... donnees) {
         this.gestionnaireNavigation = gestionnaireNav;
         this.serviceCommunicationServeur = serviceComm;
-        this.serviceSessionUtilisateur = serviceSess;
+        this.serviceSessionUtilisateur = serviceSess; // Conservé même si non utilisé directement pour l'instant
         this.paquetRessourcesI18n = paquetRessources;
 
         if (donnees != null && donnees.length > 0 && donnees[0] instanceof DetailsReunionDTO) {
@@ -70,180 +75,184 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
             this.reunionEnCoursModification = null;
         }
 
-        initialiserChampsInterface();
+        // Listener pour la confirmation de création/modification de réunion
+        // detailsReunionActuelleProperty est plus générique, on peut l'utiliser
+        serviceComm.detailsReunionActuelleProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                // Déterminer si c'est la confirmation pour CETTE opération
+                boolean estCreation = (reunionEnCoursModification == null);
+                boolean idCorrespondSiModif = (!estCreation && newVal.getIdReunion() == reunionEnCoursModification.getIdReunion());
 
-        serviceCommunicationServeur.detailsReunionActuelleProperty().addListener((obs, ancienneValeur, nouvelleValeur) -> {
-            if (nouvelleValeur != null) {
-                // Si c'est la réunion qu'on vient de créer/modifier
-                if (reunionEnCoursModification == null || // Nouvelle réunion
-                        (reunionEnCoursModification != null && nouvelleValeur.getIdReunion() == reunionEnCoursModification.getIdReunion())) { // Modification
+                // Pour une création, on pourrait comparer le titre si l'ID n'est pas encore connu localement
+                boolean titreCorrespondSiCreation = (estCreation && newVal.getTitre().equals(champTitreReunion.getText()));
+
+                if (titreCorrespondSiCreation || idCorrespondSiModif) {
                     Platform.runLater(() -> {
                         AlertesUtilisateur.afficherInformation(
-                                paquetRessourcesI18n.getString("meeting.planning.save.success.title"),
-                                paquetRessourcesI18n.getString("meeting.planning.save.success.content")
+                                paquetRessourcesI18n.getString(estCreation ? "meeting.creation.success.title" : "meeting.update.success.title"),
+                                paquetRessourcesI18n.getString(estCreation ? "meeting.creation.success.content" : "meeting.update.success.content")
                         );
                         gestionnaireNavigation.afficherTableauDeBord();
                     });
                 }
             }
         });
+        initialiserChampsInterface();
     }
 
     @FXML
     private void initialize() {
+        comboBoxTypeReunion.getItems().setAll(TypeReunion.values());
         comboBoxTypeReunion.setConverter(new StringConverter<>() {
             @Override
             public String toString(TypeReunion type) {
-                return type == null ? "" : paquetRessourcesI18n.getString("meeting.type." + type.name().toLowerCase());
+                if (type == null) return null;
+                try {
+                    return paquetRessourcesI18n.getString("type.reunion." + type.name().toLowerCase());
+                } catch (Exception e) { return type.name(); }
             }
             @Override
-            public TypeReunion fromString(String string) { return null; } // Non nécessaire pour ComboBox non éditable
+            public TypeReunion fromString(String string) { return null; }
         });
-        comboBoxTypeReunion.setItems(FXCollections.observableArrayList(TypeReunion.values()));
+        comboBoxTypeReunion.setOnAction(event -> gererVisibiliteChampMotDePasse());
 
-        List<LocalTime> heures = new ArrayList<>();
-        for (int i = 0; i < 24; i++) {
-            heures.add(LocalTime.of(i, 0));
-            heures.add(LocalTime.of(i, 30));
-        }
+        List<LocalTime> heures = IntStream.range(0, 48)
+                .mapToObj(i -> LocalTime.of(i / 2, (i % 2) * 30))
+                .collect(Collectors.toList());
         comboBoxHeureDebut.setItems(FXCollections.observableArrayList(heures));
         comboBoxHeureDebut.setConverter(new StringConverter<>() {
             @Override
             public String toString(LocalTime time) {
-                return time == null ? "" : time.format(formateurHeure);
+                return time == null ? null : time.format(formateurHeureCombo);
             }
             @Override
             public LocalTime fromString(String string) {
-                return string == null || string.isEmpty() ? null : LocalTime.parse(string, formateurHeure);
+                return string == null || string.isEmpty() ? null : LocalTime.parse(string, formateurHeureCombo);
             }
         });
 
-        SpinnerValueFactory<Integer> fabriqueValeurDuree = new SpinnerValueFactory.IntegerSpinnerValueFactory(15, 480, 60, 15); // min, max, initial, step
-        spinnerDureeMinutes.setValueFactory(fabriqueValeurDuree);
+        SpinnerValueFactory.IntegerSpinnerValueFactory fabriqueDuree = new SpinnerValueFactory.IntegerSpinnerValueFactory(15, 480, 60, 15);
+        spinnerDureeMinutes.setValueFactory(fabriqueDuree);
         spinnerDureeMinutes.setEditable(true);
-
-        if (paquetRessourcesI18n != null) {
-            boutonSauvegarderReunion.setText(paquetRessourcesI18n.getString("common.button.save"));
-            boutonAnnulerPlanification.setText(paquetRessourcesI18n.getString("common.button.cancel"));
-        }
         etiquetteMessageErreurPlanification.setText("");
     }
 
     private void initialiserChampsInterface() {
         if (reunionEnCoursModification != null) {
-            etiquetteTitreFenetrePlanification.setText(paquetRessourcesI18n.getString("meeting.planning.title.edit"));
+            etiquetteTitreFenetre.setText(paquetRessourcesI18n.getString("meeting.edit.title"));
+            boutonSauvegarderReunion.setText(paquetRessourcesI18n.getString("button.save.changes"));
             champTitreReunion.setText(reunionEnCoursModification.getTitre());
-            champDescriptionReunion.setText(reunionEnCoursModification.getDescription());
-            if (reunionEnCoursModification.getDateHeureDebut() != null) {
+            champDescriptionReunion.setText(reunionEnCoursModification.getDescription()); // Utilisation de getDescription
+            if (reunionEnCoursModification.getDateHeureDebut() != null) { // DTO utilise LocalDateTime directement
                 datePickerDateDebut.setValue(reunionEnCoursModification.getDateHeureDebut().toLocalDate());
                 comboBoxHeureDebut.setValue(reunionEnCoursModification.getDateHeureDebut().toLocalTime());
+            } else {
+                datePickerDateDebut.setValue(LocalDate.now().plusDays(1));
+                comboBoxHeureDebut.setValue(LocalTime.of(9,0));
             }
-            spinnerDureeMinutes.getValueFactory().setValue(reunionEnCoursModification.getDureeEstimeeMinutes());
+            spinnerDureeMinutes.getValueFactory().setValue(reunionEnCoursModification.getDureeEstimeeMinutes()); // Utilisation de getDureeEstimeeMinutes
             comboBoxTypeReunion.setValue(reunionEnCoursModification.getTypeReunion());
-            champMotDePasseReunionOptionnel.setText(reunionEnCoursModification.getMotDePasseOptionnelValeur());
+            if (reunionEnCoursModification.getTypeReunion() == TypeReunion.PRIVEE) {
+                champMotDePasseReunion.setText(reunionEnCoursModification.getMotDePasseOptionnelValeur());
+            }
         } else {
-            etiquetteTitreFenetrePlanification.setText(paquetRessourcesI18n.getString("meeting.planning.title.new"));
-            datePickerDateDebut.setValue(LocalDate.now());
-            comboBoxHeureDebut.setValue(LocalTime.now().plusHours(1).withMinute(0).withSecond(0).withNano(0)); // Prochaine heure ronde
+            etiquetteTitreFenetre.setText(paquetRessourcesI18n.getString("meeting.create.title"));
+            boutonSauvegarderReunion.setText(paquetRessourcesI18n.getString("button.createMeeting.short"));
+            datePickerDateDebut.setValue(LocalDate.now().plusDays(1));
+            comboBoxHeureDebut.setValue(LocalTime.of(10,0));
             comboBoxTypeReunion.getSelectionModel().selectFirst();
             spinnerDureeMinutes.getValueFactory().setValue(60);
+            champTitreReunion.clear();
+            champDescriptionReunion.clear();
+            champMotDePasseReunion.clear();
+        }
+        gererVisibiliteChampMotDePasse();
+    }
+
+    private void gererVisibiliteChampMotDePasse() {
+        boolean estPrivee = comboBoxTypeReunion.getValue() == TypeReunion.PRIVEE;
+        grilleMotDePasse.setVisible(estPrivee);
+        grilleMotDePasse.setManaged(estPrivee);
+        if (!estPrivee) {
+            champMotDePasseReunion.clear();
         }
     }
 
     @FXML
     private void actionSauvegarderReunion(ActionEvent evenement) {
+        etiquetteMessageErreurPlanification.setText("");
         String titre = champTitreReunion.getText();
         String description = champDescriptionReunion.getText();
         LocalDate dateDebut = datePickerDateDebut.getValue();
         LocalTime heureDebut = comboBoxHeureDebut.getValue();
-        Integer dureeMinutes = spinnerDureeMinutes.getValue();
-        TypeReunion typeReunion = comboBoxTypeReunion.getValue();
-        String motDePasseOptionnel = champMotDePasseReunionOptionnel.getText();
+        Integer duree = spinnerDureeMinutes.getValue();
+        TypeReunion type = comboBoxTypeReunion.getValue();
+        String motDePasse = (type == TypeReunion.PRIVEE) ? champMotDePasseReunion.getText() : null;
 
-        if (!ValidateurEntreeUtilisateur.estChaineNonVide(titre)) {
-            afficherErreurPlanification(paquetRessourcesI18n.getString("validation.meeting.title.required"));
-            return;
-        }
-        if (dateDebut == null) {
-            afficherErreurPlanification(paquetRessourcesI18n.getString("validation.meeting.date.required"));
-            return;
-        }
-        if (heureDebut == null) {
-            afficherErreurPlanification(paquetRessourcesI18n.getString("validation.meeting.time.required"));
-            return;
-        }
-        LocalDateTime dateHeureDebut = LocalDateTime.of(dateDebut, heureDebut);
-        if (dateHeureDebut.isBefore(LocalDateTime.now().plusMinutes(5))) { // Au moins 5 min dans le futur
-            afficherErreurPlanification(paquetRessourcesI18n.getString("validation.meeting.datetime.future"));
-            return;
-        }
-        if (dureeMinutes == null || dureeMinutes <= 0) {
-            afficherErreurPlanification(paquetRessourcesI18n.getString("validation.meeting.duration.positive"));
-            return;
-        }
-        if (typeReunion == null) {
-            afficherErreurPlanification(paquetRessourcesI18n.getString("validation.meeting.type.required"));
-            return;
-        }
+        try {
+            ValidateurEntreeUtilisateur.validerNonNulOuVide(titre, paquetRessourcesI18n.getString("meeting.title.label"));
+            if (dateDebut == null) throw new ExceptionValidation(paquetRessourcesI18n.getString("validation.meeting.date.required"));
+            if (heureDebut == null) throw new ExceptionValidation(paquetRessourcesI18n.getString("validation.meeting.time.required"));
+            if (duree == null || duree <= 0) throw new ExceptionValidation(paquetRessourcesI18n.getString("validation.meeting.duration.positive"));
+            if (type == null) throw new ExceptionValidation(paquetRessourcesI18n.getString("validation.meeting.type.required"));
+            if (type == TypeReunion.PRIVEE && (motDePasse == null || motDePasse.trim().isEmpty())) {
+                throw new ExceptionValidation(paquetRessourcesI18n.getString("validation.meeting.password.requiredforprivate"));
+            }
 
-        etiquetteMessageErreurPlanification.setText("");
-        activerDesactiverControles(true);
+            LocalDateTime dateHeureDebutComplete = LocalDateTime.of(dateDebut, heureDebut);
+            if (dateHeureDebutComplete.isBefore(LocalDateTime.now().plusMinutes(1))) {
+                throw new ExceptionValidation(paquetRessourcesI18n.getString("validation.meeting.datetime.future"));
+            }
 
-        DetailsReunionDTO dto = new DetailsReunionDTO();
-        if (reunionEnCoursModification != null) {
-            dto.setIdReunion(reunionEnCoursModification.getIdReunion());
-            // Conserver le statut si c'est une modification, le serveur le gérera
-            dto.setStatutReunion(reunionEnCoursModification.getStatutReunion());
-        } else {
-            dto.setStatutReunion(StatutReunion.PLANIFIEE); // Nouveau
-        }
-        dto.setTitre(titre);
-        dto.setDescription(description);
-        dto.setDateHeureDebut(dateHeureDebut);
-        dto.setDureeEstimeeMinutes(dureeMinutes);
-        dto.setTypeReunion(typeReunion);
-        dto.setMotDePasseOptionnelValeur((motDePasseOptionnel != null && motDePasseOptionnel.isEmpty()) ? null : motDePasseOptionnel);
+            DetailsReunionDTO dto = new DetailsReunionDTO();
+            dto.setTitre(titre);
+            dto.setDescription(description); // Utiliser setDescription
+            dto.setDateHeureDebut(dateHeureDebutComplete); // Passer LocalDateTime
+            dto.setDureeEstimeeMinutes(duree); // Utiliser setDureeEstimeeMinutes
+            dto.setTypeReunion(type);
+            if (type == TypeReunion.PRIVEE) {
+                dto.setMotDePasseOptionnelValeur(motDePasse);
+            }
 
-        DonneesUtilisateurDTO organisateur = serviceSessionUtilisateur.getUtilisateurConnecte();
-        if (organisateur != null) {
-            dto.setIdOrganisateur(organisateur.getIdUtilisateur());
-            dto.setNomOrganisateur(organisateur.getNomComplet());
-        } else {
-            journal.error("Impossible de sauvegarder la réunion, utilisateur non connecté.");
-            afficherErreurPlanification(paquetRessourcesI18n.getString("error.not.logged.in.for.action"));
-            activerDesactiverControles(false);
-            return;
-        }
+            activerControles(false);
 
-
-        if (reunionEnCoursModification != null) {
-            journal.info("Modification de la réunion : {}", titre);
-            serviceCommunicationServeur.envoyerRequeteModificationReunion(dto);
-        } else {
-            journal.info("Création d'une nouvelle réunion : {}", titre);
-            serviceCommunicationServeur.envoyerRequeteCreationReunion(dto);
+            if (reunionEnCoursModification != null) {
+                dto.setIdReunion(reunionEnCoursModification.getIdReunion());
+                dto.setStatutReunion(reunionEnCoursModification.getStatutReunion());
+                dto.setIdOrganisateur(reunionEnCoursModification.getIdOrganisateur());
+                dto.setDateCreationReunion(reunionEnCoursModification.getDateCreationReunion()); // Conserver la date de création originale
+                serviceCommunicationServeur.envoyerRequeteModificationReunion(dto);
+                journal.info("Tentative de modification de la réunion : {}", titre);
+            } else {
+                dto.setDateCreationReunion(LocalDateTime.now()); // Pour une nouvelle réunion
+                // idOrganisateur sera géré par le serveur
+                serviceCommunicationServeur.envoyerRequeteCreationReunion(dto);
+                journal.info("Tentative de création de la réunion : {}", titre);
+            }
+        } catch (ExceptionValidation e) {
+            etiquetteMessageErreurPlanification.setText(e.getMessage());
+            activerControles(true);
+        } catch (Exception e) {
+            journal.error("Erreur inattendue lors de la sauvegarde de la réunion", e);
+            etiquetteMessageErreurPlanification.setText(paquetRessourcesI18n.getString("error.generic.saving.meeting"));
+            activerControles(true);
         }
     }
 
-    private void afficherErreurPlanification(String message) {
-        etiquetteMessageErreurPlanification.setText(message);
-        etiquetteMessageErreurPlanification.setVisible(true);
+    private void activerControles(boolean actif) {
+        champTitreReunion.setDisable(!actif);
+        champDescriptionReunion.setDisable(!actif);
+        datePickerDateDebut.setDisable(!actif);
+        comboBoxHeureDebut.setDisable(!actif);
+        spinnerDureeMinutes.setDisable(!actif);
+        comboBoxTypeReunion.setDisable(!actif);
+        champMotDePasseReunion.setDisable(!actif);
+        boutonSauvegarderReunion.setDisable(!actif);
+        boutonAnnuler.setDisable(!actif);
     }
 
     @FXML
-    private void actionAnnulerPlanification(ActionEvent evenement) {
+    private void actionAnnuler(ActionEvent evenement) {
         gestionnaireNavigation.afficherTableauDeBord();
-    }
-
-    private void activerDesactiverControles(boolean desactiver) {
-        champTitreReunion.setDisable(desactiver);
-        champDescriptionReunion.setDisable(desactiver);
-        datePickerDateDebut.setDisable(desactiver);
-        comboBoxHeureDebut.setDisable(desactiver);
-        spinnerDureeMinutes.setDisable(desactiver);
-        comboBoxTypeReunion.setDisable(desactiver);
-        champMotDePasseReunionOptionnel.setDisable(desactiver);
-        boutonSauvegarderReunion.setDisable(desactiver);
-        boutonAnnulerPlanification.setDisable(desactiver);
     }
 }

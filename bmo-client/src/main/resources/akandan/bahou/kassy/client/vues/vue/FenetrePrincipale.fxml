@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.layout.BorderPane?>
+
+<BorderPane fx:id="conteneurPrincipalRacine" prefHeight="720.0" prefWidth="1024.0" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="akandan.bahou.kassy.client.controleur.ControleurFenetrePrincipale">
+    <top>
+        <MenuBar fx:id="barreMenuPrincipale">
+            <menus>
+                <Menu mnemonicParsing="false" text="%menu.file">
+                    <items>
+                        <MenuItem fx:id="menuItemNavigationTableauDeBord" mnemonicParsing="false" onAction="#actionNaviguerVersTableauDeBord" text="%menu.navigation.dashboard" />
+                        <MenuItem fx:id="menuItemNavigationAdminUtilisateurs" mnemonicParsing="false" onAction="#actionNaviguerVersAdminUtilisateurs" text="%menu.navigation.adminUsers" />
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <MenuItem fx:id="menuItemFichierQuitter" mnemonicParsing="false" onAction="#actionQuitterApplication" text="%menu.file.quit" />
+                    </items>
+                </Menu>
+                <Menu mnemonicParsing="false" text="%menu.help">
+                    <items>
+                        <MenuItem fx:id="menuItemAideAPropos" mnemonicParsing="false" onAction="#actionAfficherAPropos" text="%menu.help.about" />
+                    </items>
+                </Menu>
+            </menus>
+        </MenuBar>
+    </top>
+    <bottom>
+        <Label fx:id="etiquetteStatutApplication" text="%status.initializing" BorderPane.alignment="CENTER_LEFT">
+            <BorderPane.margin>
+                <Insets bottom="5.0" left="10.0" right="5.0" top="5.0" />
+            </BorderPane.margin>
+        </Label>
+    </bottom>
+    <!-- Le centre du BorderPane (fx:id="conteneurPrincipalRacine") sera rempli dynamiquement par GestionnaireNavigation.java -->
+    <!-- en appelant la méthode publique setCenter(Node node) de ce contrôleur, si cette approche est choisie. -->
+    <!-- Alternativement, GestionnaireNavigation modifie directement la scène du Stage principal. -->
+</BorderPane>

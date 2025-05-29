@@ -1,32 +1,31 @@
 package akandan.bahou.kassy.client.controleur;
 
-import javafx.application.Platform;
-import javafx.event.ActionEvent;
-import javafx.fxml.FXML;
-import javafx.scene.control.Label;
-import javafx.scene.control.Menu;
-import javafx.scene.control.MenuBar;
-import javafx.scene.control.MenuItem;
-import javafx.scene.layout.BorderPane;
-import java.util.ResourceBundle;
 import akandan.bahou.kassy.client.coeur.GestionnaireNavigation;
 import akandan.bahou.kassy.client.service.ServiceCommunicationServeur;
 import akandan.bahou.kassy.client.service.ServiceSessionUtilisateur;
 import akandan.bahou.kassy.client.util.AlertesUtilisateur;
+import akandan.bahou.kassy.commun.modele.RoleUtilisateur;
 import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
+import java.util.ResourceBundle;
+import javafx.application.Platform;
+import javafx.event.ActionEvent;
+import javafx.fxml.FXML;
+import javafx.scene.Node;
+import javafx.scene.control.Label;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
+import javafx.scene.layout.BorderPane;
 import org.slf4j.Logger;
 
 public class ControleurFenetrePrincipale implements ControleurAvecInitialisation {
 
-    @FXML private BorderPane conteneurPrincipalVue;
+    @FXML private BorderPane conteneurPrincipalRacine;
     @FXML private MenuBar barreMenuPrincipale;
-    @FXML private Menu menuFichier;
-    @FXML private MenuItem menuItemDeconnexion;
-    @FXML private MenuItem menuItemQuitter;
-    @FXML private Menu menuAide;
-    @FXML private MenuItem menuItemAPropos;
-    @FXML private Label etiquetteStatutUtilisateurConnecte;
-    @FXML private Label etiquetteStatutServeur;
+    @FXML private MenuItem menuItemFichierQuitter;
+    @FXML private MenuItem menuItemNavigationTableauDeBord;
+    @FXML private MenuItem menuItemNavigationAdminUtilisateurs;
+    @FXML private MenuItem menuItemAideAPropos;
+    @FXML private Label etiquetteStatutApplication;
 
     private GestionnaireNavigation gestionnaireNavigation;
     private ServiceCommunicationServeur serviceCommunicationServeur;
@@ -44,102 +43,106 @@ public class ControleurFenetrePrincipale implements ControleurAvecInitialisation
         this.serviceSessionUtilisateur = serviceSess;
         this.paquetRessourcesI18n = paquetRessources;
 
-        // Adapter GestionnaireNavigation pour qu'il utilise conteneurPrincipalVue
-        // Pour l'instant, on suppose que GestionnaireNavigation a été adapté.
-        // Si ce n'est pas le cas, la première vue (connexion) doit être chargée ici
-        // ou par AppPrincipale dans la scène principale.
+        mettreAJourTextesEtVisibiliteMenus();
 
-        if (serviceSessionUtilisateur != null) {
-            serviceSessionUtilisateur.estUtilisateurConnecteProperty().addListener((obs, etaitCo, estCoMaintenant) -> mettreAJourElementsUIConnexion());
+        if (serviceSess != null) {
+            serviceSess.estUtilisateurConnecteProperty().addListener((obs, ancien, nouveau) -> {
+                mettreAJourStatutApplication(nouveau);
+                mettreAJourTextesEtVisibiliteMenus();
+            });
+            // État initial au cas où l'écouteur n'est pas déclenché immédiatement
+            mettreAJourStatutApplication(serviceSess.estConnecte());
         }
-        if (serviceCommunicationServeur != null) {
-            serviceCommunicationServeur.etatConnexionServeurProperty().addListener((obs, etaitCoServ, estCoServMaintenant) -> mettreAJourStatutServeur());
-        }
-
-        mettreAJourElementsUIConnexion();
-        mettreAJourStatutServeur();
-
-        // Charge la vue de connexion initiale dans le conteneur si GestionnaireNavigation est adapté
-        // Sinon, cette logique est dans AppPrincipale qui change toute la scène.
-        // Pour ce modèle, on suppose que le GestionnaireNavigation est adapté.
-        if (this.gestionnaireNavigation != null && this.conteneurPrincipalVue != null) {
-            // Le GestionnaireNavigation doit être modifié pour avoir une méthode comme:
-            // this.gestionnaireNavigation.chargerVueDansConteneur(this.conteneurPrincipalVue, "FenetreConnexion.fxml", "app.title.login");
-            // Pour l'instant, on suppose que la vue de connexion est chargée par AppPrincipale changeant la Scene,
-            // et que cette FenetrePrincipale est chargée APRÈS connexion réussie, contenant déjà le TableauDeBord.
-            // OU que AppPrincipale charge FenetrePrincipale.fxml, et FenetrePrincipale charge Connexion.fxml dans son conteneur.
-            // Pour simplifier, on va supposer que la première vue est chargée par AppPrincipale ou le GestionnaireNavigation au démarrage.
-            // Si aucune session n'est active, le gestionnaire de navigation devrait afficher la vue de connexion.
-            if (!serviceSessionUtilisateur.estConnecte()) {
-                gestionnaireNavigation.afficherVueConnexion(conteneurPrincipalVue); // Méthode à ajouter à GestionnaireNavigation
-            } else {
-                gestionnaireNavigation.afficherTableauDeBord(conteneurPrincipalVue); // Méthode à ajouter
-            }
+        if (serviceComm != null) {
+            serviceComm.etatConnexionServeurProperty().addListener((obs, etaitCo, estCoMaintenant) -> {
+                Platform.runLater(() -> mettreAJourStatutApplication(serviceSess != null && serviceSess.estConnecte()));
+            });
         }
     }
 
     @FXML
     private void initialize() {
-        if (paquetRessourcesI18n != null) {
-            menuFichier.setText(paquetRessourcesI18n.getString("main.menu.file"));
-            menuItemDeconnexion.setText(paquetRessourcesI18n.getString("main.menu.file.logout"));
-            menuItemQuitter.setText(paquetRessourcesI18n.getString("main.menu.file.quit"));
-            menuAide.setText(paquetRessourcesI18n.getString("main.menu.help"));
-            menuItemAPropos.setText(paquetRessourcesI18n.getString("main.menu.help.about"));
-        }
-        menuItemDeconnexion.setVisible(false); // Initialement non visible
-        menuItemDeconnexion.setManaged(false);
+        mettreAJourTextesEtVisibiliteMenus();
     }
 
-    @FXML
-    private void actionDeconnexion(ActionEvent evenement) {
-        serviceCommunicationServeur.envoyerRequeteDeconnexion();
-        serviceSessionUtilisateur.viderSession();
-        // Le listener sur estUtilisateurConnecteProperty devrait gérer le changement de vue
-        // ou on le force ici si GestionnaireNavigation est adapté pour charger dans le conteneur.
-        gestionnaireNavigation.afficherVueConnexion(conteneurPrincipalVue);
+    private void mettreAJourTextesEtVisibiliteMenus() {
+        if (paquetRessourcesI18n != null) {
+            if (menuItemFichierQuitter != null) menuItemFichierQuitter.setText(paquetRessourcesI18n.getString("menu.file.quit"));
+            if (menuItemAideAPropos != null) menuItemAideAPropos.setText(paquetRessourcesI18n.getString("menu.help.about"));
+            if (menuItemNavigationTableauDeBord != null) menuItemNavigationTableauDeBord.setText(paquetRessourcesI18n.getString("menu.navigation.dashboard"));
+            if (menuItemNavigationAdminUtilisateurs != null) menuItemNavigationAdminUtilisateurs.setText(paquetRessourcesI18n.getString("menu.navigation.adminUsers"));
+        }
+
+        boolean estConnecte = serviceSessionUtilisateur != null && serviceSessionUtilisateur.estConnecte();
+        boolean estAdmin = serviceSessionUtilisateur != null && serviceSessionUtilisateur.aRole(RoleUtilisateur.ADMINISTRATEUR);
+
+        if (menuItemNavigationTableauDeBord != null) {
+            menuItemNavigationTableauDeBord.setVisible(estConnecte);
+            // MenuItem n'a pas setManaged, la visibilité suffit.
+        }
+        if (menuItemNavigationAdminUtilisateurs != null) {
+            menuItemNavigationAdminUtilisateurs.setVisible(estConnecte && estAdmin);
+        }
+    }
+
+    public void definirContenuCentral(Node contenu) {
+        if (conteneurPrincipalRacine != null) {
+            conteneurPrincipalRacine.setCenter(contenu);
+        } else {
+            journal.warn("conteneurPrincipalRacine est nul, impossible de définir le contenu central.");
+        }
     }
 
     @FXML
     private void actionQuitterApplication(ActionEvent evenement) {
         if (serviceCommunicationServeur != null) {
+            serviceCommunicationServeur.envoyerRequeteDeconnexion(); // Notifier le serveur
             serviceCommunicationServeur.deconnecterDuServeur();
         }
         Platform.exit();
-        System.exit(0); // Force l'arrêt si Platform.exit() ne suffit pas (ex: threads non-daemon)
     }
 
     @FXML
     private void actionAfficherAPropos(ActionEvent evenement) {
-        AlertesUtilisateur.afficherInformation(
-                paquetRessourcesI18n.getString("about.title"),
-                paquetRessourcesI18n.getString("about.content") + "\nVersion: 1.0.0-BMO\nUtilisateur: " + (serviceSessionUtilisateur.estConnecte() ? serviceSessionUtilisateur.getUtilisateurConnecte().getNomComplet() : "N/A")
-        );
+        String titre = (paquetRessourcesI18n != null && paquetRessourcesI18n.containsKey("about.title")) ? paquetRessourcesI18n.getString("about.title") : "À Propos";
+        String contenu = (paquetRessourcesI18n != null && paquetRessourcesI18n.containsKey("about.content")) ? paquetRessourcesI18n.getString("about.content") : "Application BMO - Bureau de Réunions Ouvertes.";
+        AlertesUtilisateur.afficherInformation(titre, contenu);
     }
 
-    private void mettreAJourElementsUIConnexion() {
-        Platform.runLater(() -> {
-            boolean estConnecte = serviceSessionUtilisateur.estConnecte();
-            menuItemDeconnexion.setVisible(estConnecte);
-            menuItemDeconnexion.setManaged(estConnecte);
-            if (estConnecte && serviceSessionUtilisateur.getUtilisateurConnecte() != null) {
-                etiquetteStatutUtilisateurConnecte.setText(paquetRessourcesI18n.getString("main.status.connected.as") + " " + serviceSessionUtilisateur.getUtilisateurConnecte().getNomComplet());
-            } else {
-                etiquetteStatutUtilisateurConnecte.setText(paquetRessourcesI18n.getString("main.status.notConnected"));
-            }
-        });
+    @FXML
+    private void actionNaviguerVersTableauDeBord(ActionEvent evenement) {
+        if (gestionnaireNavigation != null && serviceSessionUtilisateur != null && serviceSessionUtilisateur.estConnecte()) {
+            gestionnaireNavigation.afficherTableauDeBord();
+        } else if (gestionnaireNavigation != null) { // Si pas connecté, retour à la connexion
+            gestionnaireNavigation.afficherVueConnexion();
+        }
     }
 
-    private void mettreAJourStatutServeur() {
+    @FXML
+    private void actionNaviguerVersAdminUtilisateurs(ActionEvent evenement) {
+        if (gestionnaireNavigation != null && serviceSessionUtilisateur != null && serviceSessionUtilisateur.aRole(RoleUtilisateur.ADMINISTRATEUR)) {
+            gestionnaireNavigation.afficherVueAdministrationUtilisateurs();
+        } else {
+            AlertesUtilisateur.afficherErreur(
+                    (paquetRessourcesI18n != null && paquetRessourcesI18n.containsKey("error.access.denied.title")) ? paquetRessourcesI18n.getString("error.access.denied.title") : "Accès Refusé",
+                    (paquetRessourcesI18n != null && paquetRessourcesI18n.containsKey("error.admin.access.required")) ? paquetRessourcesI18n.getString("error.admin.access.required") : "Droits administrateur requis."
+            );
+        }
+    }
+
+    private void mettreAJourStatutApplication(boolean estUtilisateurConnecteLocal) {
+        if (etiquetteStatutApplication == null || paquetRessourcesI18n == null) return;
+
         Platform.runLater(() -> {
-            boolean connecteAuServeur = serviceCommunicationServeur.estActuellementConnecte();
-            if (connecteAuServeur) {
-                etiquetteStatutServeur.setText(paquetRessourcesI18n.getString("main.status.server.connected"));
-                etiquetteStatutServeur.setStyle("-fx-text-fill: green;");
+            String statutFinal;
+            if (serviceCommunicationServeur != null && !serviceCommunicationServeur.estActuellementConnecte()) {
+                statutFinal = paquetRessourcesI18n.getString("status.server.disconnected");
+            } else if (estUtilisateurConnecteLocal && serviceSessionUtilisateur != null && serviceSessionUtilisateur.getUtilisateurConnecte() != null) {
+                statutFinal = String.format(paquetRessourcesI18n.getString("status.connected.as"), serviceSessionUtilisateur.getUtilisateurConnecte().getNomComplet());
             } else {
-                etiquetteStatutServeur.setText(paquetRessourcesI18n.getString("main.status.server.disconnected"));
-                etiquetteStatutServeur.setStyle("-fx-text-fill: red;");
+                statutFinal = paquetRessourcesI18n.getString("status.user.disconnected");
             }
+            etiquetteStatutApplication.setText(statutFinal);
         });
     }
 }

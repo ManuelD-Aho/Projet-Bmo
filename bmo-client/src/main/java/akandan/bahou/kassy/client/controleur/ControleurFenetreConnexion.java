@@ -1,21 +1,21 @@
 package akandan.bahou.kassy.client.controleur;
 
-import javafx.fxml.FXML;
-import javafx.scene.control.TextField;
-import javafx.scene.control.PasswordField;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.Hyperlink;
-import javafx.scene.layout.VBox;
-import javafx.event.ActionEvent;
-import javafx.application.Platform;
-import java.util.ResourceBundle;
 import akandan.bahou.kassy.client.coeur.GestionnaireNavigation;
 import akandan.bahou.kassy.client.service.ServiceCommunicationServeur;
 import akandan.bahou.kassy.client.service.ServiceSessionUtilisateur;
-// import akandan.bahou.kassy.client.util.AlertesUtilisateur; // Non utilisé directement ici, les erreurs sont dans les labels
-import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur;
 import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
+import akandan.bahou.kassy.commun.util.ExceptionValidation;
+import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur; // Pour la validation client-side
+import java.util.ResourceBundle;
+import javafx.application.Platform;
+import javafx.event.ActionEvent;
+import javafx.fxml.FXML;
+import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
+import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 
 public class ControleurFenetreConnexion implements ControleurAvecInitialisation {
@@ -52,79 +52,67 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
         this.serviceSessionUtilisateur = serviceSess;
         this.paquetRessourcesI18n = paquetRessources;
 
+        // Écouteur pour les messages d'erreur d'authentification/inscription
         serviceComm.dernierMessageErreurAuthProperty().addListener((obs, ancienMessage, nouveauMessage) -> {
             if (nouveauMessage != null && !nouveauMessage.isEmpty()) {
                 Platform.runLater(() -> {
                     if (panneauConnexion.isVisible()) {
                         afficherErreurConnexion(nouveauMessage);
+                        activerDesactiverControlesConnexion(false);
                     } else if (panneauInscription.isVisible()) {
                         afficherErreurInscription(nouveauMessage);
+                        activerDesactiverControlesInscription(false);
                     }
                 });
             }
         });
 
+        // Écouteur pour la réussite de la connexion
         serviceSess.estUtilisateurConnecteProperty().addListener((obs, etaitConnecte, estConnecteMaintenant) -> {
             if (estConnecteMaintenant) {
                 Platform.runLater(() -> {
-                    // Effacer les champs après une connexion réussie
-                    if(champIdentifiantConnexion != null) champIdentifiantConnexion.clear();
-                    if(champMotDePasseConnexion != null) champMotDePasseConnexion.clear();
-                    if(etiquetteMessageErreurConnexion != null) etiquetteMessageErreurConnexion.setText("");
+                    viderChamps();
                     gestionnaireNavigation.afficherTableauDeBord();
                 });
             }
         });
 
-        serviceComm.etatConnexionServeurProperty().addListener((obs, etaitCoServeur, estCoServeurMaintenant) ->
-                Platform.runLater(() -> mettreAJourEtatControlesSelonConnexionServeur(!estCoServeurMaintenant))
-        );
+        // Écouteur pour l'état de la connexion au serveur
+        serviceComm.etatConnexionServeurProperty().addListener((obs, etaitCoServeur, estCoServeurMaintenant) -> {
+            Platform.runLater(() -> {
+                boolean desactiverSaisie = !estCoServeurMaintenant;
+                activerDesactiverControlesConnexion(desactiverSaisie);
+                activerDesactiverControlesInscription(desactiverSaisie);
+
+                if(desactiverSaisie && panneauConnexion.isVisible() && (etiquetteMessageErreurConnexion.getText() == null || etiquetteMessageErreurConnexion.getText().isEmpty())){
+                    etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
+                } else if (!desactiverSaisie && panneauConnexion.isVisible()){
+                    if (etiquetteMessageErreurConnexion.getText().equals(paquetRessourcesI18n.getString("error.server.unavailable"))) {
+                        etiquetteMessageErreurConnexion.setText("");
+                    }
+                }
+                if(desactiverSaisie && panneauInscription.isVisible() && (etiquetteMessageErreurInscription.getText() == null || etiquetteMessageErreurInscription.getText().isEmpty())){
+                    etiquetteMessageErreurInscription.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
+                } else if (!desactiverSaisie && panneauInscription.isVisible()){
+                    if (etiquetteMessageErreurInscription.getText().equals(paquetRessourcesI18n.getString("error.server.unavailable"))) {
+                        etiquetteMessageErreurInscription.setText("");
+                    }
+                }
+            });
+        });
+        // État initial des contrôles basé sur la connexion serveur
+        Platform.runLater(() -> {
+            boolean desactiverSaisieInitiale = !serviceCommunicationServeur.estActuellementConnecte();
+            activerDesactiverControlesConnexion(desactiverSaisieInitiale);
+            if(desactiverSaisieInitiale){
+                etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
+            }
+        });
     }
 
     @FXML
     private void initialize() {
-        if (etiquetteMessageErreurConnexion != null) etiquetteMessageErreurConnexion.setText("");
-        if (etiquetteMessageErreurInscription != null) etiquetteMessageErreurInscription.setText("");
-
-        basculerVersPanneauConnexion();
-
-        // L'état initial des contrôles est géré par le listener sur etatConnexionServeurProperty
-        // mais on peut forcer une mise à jour initiale si le service est déjà initialisé
-        if (serviceCommunicationServeur != null) {
-            mettreAJourEtatControlesSelonConnexionServeur(!serviceCommunicationServeur.estActuellementConnecte());
-        }
-    }
-
-    private void basculerVersPanneauConnexion() {
-        if (panneauConnexion != null) {
-            panneauConnexion.setVisible(true);
-            panneauConnexion.setManaged(true);
-        }
-        if (panneauInscription != null) {
-            panneauInscription.setVisible(false);
-            panneauInscription.setManaged(false);
-        }
-        if (champIdentifiantConnexion != null) champIdentifiantConnexion.clear();
-        if (champMotDePasseConnexion != null) champMotDePasseConnexion.clear();
-        if (etiquetteMessageErreurConnexion != null) etiquetteMessageErreurConnexion.setText("");
-        if (etiquetteMessageErreurInscription != null) etiquetteMessageErreurInscription.setText(""); // Effacer aussi l'erreur de l'autre panneau
-    }
-
-    private void basculerVersPanneauInscription() {
-        if (panneauInscription != null) {
-            panneauInscription.setVisible(true);
-            panneauInscription.setManaged(true);
-        }
-        if (panneauConnexion != null) {
-            panneauConnexion.setVisible(false);
-            panneauConnexion.setManaged(false);
-        }
-        if (champNomCompletInscription != null) champNomCompletInscription.clear();
-        if (champIdentifiantInscription != null) champIdentifiantInscription.clear();
-        if (champMotDePasseInscription != null) champMotDePasseInscription.clear();
-        if (champConfirmationMotDePasseInscription != null) champConfirmationMotDePasseInscription.clear();
-        if (etiquetteMessageErreurInscription != null) etiquetteMessageErreurInscription.setText("");
-        if (etiquetteMessageErreurConnexion != null) etiquetteMessageErreurConnexion.setText(""); // Effacer aussi l'erreur de l'autre panneau
+        basculerVersPanneauConnexion(); // Assurer l'état initial correct
     }
 
     @FXML
@@ -132,12 +120,11 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
         String identifiant = champIdentifiantConnexion.getText();
         String motDePasse = champMotDePasseConnexion.getText();
 
-        if (identifiant == null || identifiant.trim().isEmpty()) {
-            afficherErreurConnexion(paquetRessourcesI18n.getString("validation.identifier.required"));
-            return;
-        }
-        if (motDePasse == null || motDePasse.isEmpty()) {
-            afficherErreurConnexion(paquetRessourcesI18n.getString("validation.password.required"));
+        try {
+            ValidateurEntreeUtilisateur.validerNonNulOuVide(identifiant, paquetRessourcesI18n.getString("login.email"));
+            ValidateurEntreeUtilisateur.validerNonNulOuVide(motDePasse, paquetRessourcesI18n.getString("login.password"));
+        } catch (ExceptionValidation e) {
+            afficherErreurConnexion(e.getMessage());
             return;
         }
 
@@ -164,20 +151,15 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
         String motDePasse = champMotDePasseInscription.getText();
         String confirmationMotDePasse = champConfirmationMotDePasseInscription.getText();
 
-        if (!ValidateurEntreeUtilisateur.estNomCompletValide(nomComplet)) {
-            afficherErreurInscription(paquetRessourcesI18n.getString("validation.fullname.required"));
-            return;
-        }
-        if (!ValidateurEntreeUtilisateur.estIdentifiantValide(identifiant)) {
-            afficherErreurInscription(paquetRessourcesI18n.getString("validation.identifier.format"));
-            return;
-        }
-        if (!ValidateurEntreeUtilisateur.estMotDePasseValide(motDePasse)) {
-            afficherErreurInscription(paquetRessourcesI18n.getString("validation.password.complexity"));
-            return;
-        }
-        if (!motDePasse.equals(confirmationMotDePasse)) {
-            afficherErreurInscription(paquetRessourcesI18n.getString("validation.password.confirmation"));
+        try {
+            ValidateurEntreeUtilisateur.validerNonNulOuVide(nomComplet, paquetRessourcesI18n.getString("signup.fullname"));
+            ValidateurEntreeUtilisateur.validerIdentifiantConnexion(identifiant, paquetRessourcesI18n.getString("signup.identifier"));
+            ValidateurEntreeUtilisateur.validerComplexiteMotDePasse(motDePasse, paquetRessourcesI18n.getString("signup.password"));
+            if (!motDePasse.equals(confirmationMotDePasse)) {
+                throw new ExceptionValidation(paquetRessourcesI18n.getString("validation.motdepasse.confirmation"));
+            }
+        } catch (ExceptionValidation e) {
+            afficherErreurInscription(e.getMessage());
             return;
         }
 
@@ -187,51 +169,72 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
         journal.info("Tentative d'inscription pour l'utilisateur : {}", identifiant);
     }
 
-    private void afficherErreurConnexion(String message) {
-        if (etiquetteMessageErreurConnexion != null) {
-            etiquetteMessageErreurConnexion.setText(message);
+    private void viderChamps() {
+        champIdentifiantConnexion.clear();
+        champMotDePasseConnexion.clear();
+        etiquetteMessageErreurConnexion.setText("");
+        champNomCompletInscription.clear();
+        champIdentifiantInscription.clear();
+        champMotDePasseInscription.clear();
+        champConfirmationMotDePasseInscription.clear();
+        etiquetteMessageErreurInscription.setText("");
+    }
+
+    private void basculerVersPanneauInscription() {
+        viderChamps();
+        panneauConnexion.setVisible(false);
+        panneauConnexion.setManaged(false);
+        panneauInscription.setVisible(true);
+        panneauInscription.setManaged(true);
+        boolean desactiverSaisie = !serviceCommunicationServeur.estActuellementConnecte();
+        activerDesactiverControlesInscription(desactiverSaisie);
+        if(desactiverSaisie){
+            etiquetteMessageErreurInscription.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
         }
-        activerDesactiverControlesConnexion(false);
+    }
+
+    private void basculerVersPanneauConnexion() {
+        viderChamps();
+        panneauInscription.setVisible(false);
+        panneauInscription.setManaged(false);
+        panneauConnexion.setVisible(true);
+        panneauConnexion.setManaged(true);
+        boolean desactiverSaisie = !serviceCommunicationServeur.estActuellementConnecte();
+        activerDesactiverControlesConnexion(desactiverSaisie);
+        if(desactiverSaisie){
+            etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
+        }
+    }
+
+    private void afficherErreurConnexion(String message) {
+        etiquetteMessageErreurConnexion.setText(message);
+        etiquetteMessageErreurConnexion.setVisible(true);
     }
 
     private void afficherErreurInscription(String message) {
-        if (etiquetteMessageErreurInscription != null) {
-            etiquetteMessageErreurInscription.setText(message);
-        }
-        activerDesactiverControlesInscription(false);
+        etiquetteMessageErreurInscription.setText(message);
+        etiquetteMessageErreurInscription.setVisible(true);
     }
 
     private void activerDesactiverControlesConnexion(boolean desactiver) {
-        if (champIdentifiantConnexion != null) champIdentifiantConnexion.setDisable(desactiver);
-        if (champMotDePasseConnexion != null) champMotDePasseConnexion.setDisable(desactiver);
-        if (boutonSeConnecter != null) boutonSeConnecter.setDisable(desactiver);
-        if (lienCreerCompte != null) lienCreerCompte.setDisable(desactiver);
+        champIdentifiantConnexion.setDisable(desactiver);
+        champMotDePasseConnexion.setDisable(desactiver);
+        boutonSeConnecter.setDisable(desactiver);
+        lienCreerCompte.setDisable(desactiver);
+        if (!desactiver && etiquetteMessageErreurConnexion.getText().equals(paquetRessourcesI18n.getString("error.server.unavailable"))) {
+            etiquetteMessageErreurConnexion.setText("");
+        }
     }
 
     private void activerDesactiverControlesInscription(boolean desactiver) {
-        if (champNomCompletInscription != null) champNomCompletInscription.setDisable(desactiver);
-        if (champIdentifiantInscription != null) champIdentifiantInscription.setDisable(desactiver);
-        if (champMotDePasseInscription != null) champMotDePasseInscription.setDisable(desactiver);
-        if (champConfirmationMotDePasseInscription != null) champConfirmationMotDePasseInscription.setDisable(desactiver);
-        if (boutonValiderInscription != null) boutonValiderInscription.setDisable(desactiver);
-        if (boutonAnnulerInscription != null) boutonAnnulerInscription.setDisable(desactiver);
-    }
-
-    private void mettreAJourEtatControlesSelonConnexionServeur(boolean serveurIndisponible) {
-        activerDesactiverControlesConnexion(serveurIndisponible);
-        activerDesactiverControlesInscription(serveurIndisponible);
-
-        String messageErreurServeur = serveurIndisponible ? paquetRessourcesI18n.getString("error.server.unavailable") : "";
-
-        if (panneauConnexion != null && panneauConnexion.isVisible() && etiquetteMessageErreurConnexion != null) {
-            if (serveurIndisponible || etiquetteMessageErreurConnexion.getText().equals(paquetRessourcesI18n.getString("error.server.unavailable"))) {
-                etiquetteMessageErreurConnexion.setText(messageErreurServeur);
-            }
-        }
-        if (panneauInscription != null && panneauInscription.isVisible() && etiquetteMessageErreurInscription != null) {
-            if (serveurIndisponible || etiquetteMessageErreurInscription.getText().equals(paquetRessourcesI18n.getString("error.server.unavailable"))) {
-                etiquetteMessageErreurInscription.setText(messageErreurServeur);
-            }
+        champNomCompletInscription.setDisable(desactiver);
+        champIdentifiantInscription.setDisable(desactiver);
+        champMotDePasseInscription.setDisable(desactiver);
+        champConfirmationMotDePasseInscription.setDisable(desactiver);
+        boutonValiderInscription.setDisable(desactiver);
+        boutonAnnulerInscription.setDisable(desactiver);
+        if (!desactiver && etiquetteMessageErreurInscription.getText().equals(paquetRessourcesI18n.getString("error.server.unavailable"))) {
+            etiquetteMessageErreurInscription.setText("");
         }
     }
 }

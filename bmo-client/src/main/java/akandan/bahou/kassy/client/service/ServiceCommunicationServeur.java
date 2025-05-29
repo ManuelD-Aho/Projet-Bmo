@@ -1,5 +1,13 @@
 package akandan.bahou.kassy.client.service;
 
+import akandan.bahou.kassy.client.util.AlertesUtilisateur;
+import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
+import akandan.bahou.kassy.commun.dto.DonneesUtilisateurDTO;
+import akandan.bahou.kassy.commun.dto.MessageChatDTO;
+import akandan.bahou.kassy.commun.protocole.TypeReponseServeur;
+import akandan.bahou.kassy.commun.protocole.TypeRequeteClient;
+import akandan.bahou.kassy.commun.util.ConstantesProtocoleBMO;
+import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -13,7 +21,6 @@ import java.util.ResourceBundle;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
@@ -26,21 +33,10 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
-
-import akandan.bahou.kassy.client.util.AlertesUtilisateur;
-import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
-import akandan.bahou.kassy.commun.dto.DonneesUtilisateurDTO;
-import akandan.bahou.kassy.commun.dto.MessageChatDTO;
-import akandan.bahou.kassy.commun.protocole.TypeReponseServeur;
-import akandan.bahou.kassy.commun.protocole.TypeRequeteClient;
-import akandan.bahou.kassy.commun.util.ConstantesProtocoleBMO;
-import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
-
 
 public class ServiceCommunicationServeur {
 
@@ -60,13 +56,13 @@ public class ServiceCommunicationServeur {
     private final ListProperty<DetailsReunionDTO> listeToutesReunions = new SimpleListProperty<>(FXCollections.observableArrayList());
     private final ListProperty<DetailsReunionDTO> listeMesReunions = new SimpleListProperty<>(FXCollections.observableArrayList());
     private final ObjectProperty<DonneesUtilisateurDTO> profilUtilisateurActuel = new SimpleObjectProperty<>();
-    private final ListProperty<DonneesUtilisateurDTO> listeGlobaleUtilisateurs = new SimpleListProperty<>(FXCollections.observableArrayList()); // Pour admin
+    private final ListProperty<DonneesUtilisateurDTO> listeGlobaleUtilisateurs = new SimpleListProperty<>(FXCollections.observableArrayList());
     private final BooleanProperty etatConnexionServeur = new SimpleBooleanProperty(false);
     private final ObjectProperty<DonneesUtilisateurDTO> notificationUtilisateurRejoint = new SimpleObjectProperty<>();
     private final ObjectProperty<DonneesUtilisateurDTO> notificationUtilisateurQuitte = new SimpleObjectProperty<>();
+    private final ObjectProperty<DetailsReunionDTO> notificationReunionMiseAJour = new SimpleObjectProperty<>();
     private final IntegerProperty notificationReunionClotureeId = new SimpleIntegerProperty(0);
     private final ObjectProperty<DonneesUtilisateurDTO> utilisateurMisAJourParAdmin = new SimpleObjectProperty<>();
-
 
     public ServiceCommunicationServeur(ServiceSessionUtilisateur serviceSession, ResourceBundle paquetRessources) {
         this.serviceSessionUtilisateur = serviceSession;
@@ -76,15 +72,12 @@ public class ServiceCommunicationServeur {
 
     private void initialiserServiceEcoute() {
         if (this.serviceEcouteServeur != null && !this.serviceEcouteServeur.isShutdown()) {
-            this.doitEcouter = false; // Signaler l'arrêt au thread existant
-            this.serviceEcouteServeur.shutdown();
+            this.serviceEcouteServeur.shutdownNow();
             try {
                 if (!this.serviceEcouteServeur.awaitTermination(1, TimeUnit.SECONDS)) {
-                    this.serviceEcouteServeur.shutdownNow();
                     journal.warn("Le service d'écoute n'a pas pu être arrêté proprement lors de la réinitialisation.");
                 }
             } catch (InterruptedException e) {
-                this.serviceEcouteServeur.shutdownNow();
                 journal.warn("Interruption lors de l'attente de l'arrêt du service d'écoute.");
                 Thread.currentThread().interrupt();
             }
@@ -124,38 +117,34 @@ public class ServiceCommunicationServeur {
         if (serviceEcouteServeur != null && !serviceEcouteServeur.isShutdown()) {
             serviceEcouteServeur.shutdown();
             try {
-                if (!serviceEcouteServeur.awaitTermination(2, TimeUnit.SECONDS)) {
-                    serviceEcouteServeur.shutdownNow();
+                if (!serviceEcouteServeur.awaitTermination(1, TimeUnit.SECONDS)) {
+                    serviceEcouteServeur.shutdownNow(); // Tente d'arrêter plus agressivement
                 }
             } catch (InterruptedException e) {
                 serviceEcouteServeur.shutdownNow();
                 Thread.currentThread().interrupt();
-                journal.warn("Thread d'écoute interrompu pendant l'attente de terminaison.");
+                journal.warn("Thread d'écoute interrompu pendant l'attente de terminaison lors de la déconnexion.");
             }
         }
         initialiserServiceEcoute(); // Prépare pour une reconnexion future
 
         try {
-            if (fluxSortie != null) {
-                fluxSortie.close();
-            }
-            if (fluxEntree != null) {
-                fluxEntree.close();
-            }
-            if (socketClient != null && !socketClient.isClosed()) {
-                socketClient.close();
-            }
-        } catch (IOException e) {
-            journal.warn("Erreur lors de la fermeture des flux ou du socket : {}", e.getMessage());
-        } finally {
-            fluxSortie = null;
-            fluxEntree = null;
-            socketClient = null;
-            if (serviceSessionUtilisateur != null) {
-                serviceSessionUtilisateur.viderSession();
-            }
-            journal.info("Déconnecté du serveur BMO.");
+            if (fluxSortie != null) fluxSortie.close();
+        } catch (Exception e) { journal.warn("Erreur fermeture flux sortie: {}", e.getMessage());}
+        try {
+            if (fluxEntree != null) fluxEntree.close();
+        } catch (IOException e) { journal.warn("Erreur fermeture flux entrée: {}", e.getMessage());}
+        try {
+            if (socketClient != null && !socketClient.isClosed()) socketClient.close();
+        } catch (IOException e) { journal.warn("Erreur fermeture socket: {}", e.getMessage());}
+
+        fluxSortie = null;
+        fluxEntree = null;
+        socketClient = null;
+        if (serviceSessionUtilisateur != null) {
+            serviceSessionUtilisateur.viderSession();
         }
+        journal.info("Déconnecté du serveur BMO.");
     }
 
     public boolean estActuellementConnecte() {
@@ -167,92 +156,63 @@ public class ServiceCommunicationServeur {
             fluxSortie.println(message);
             journal.debug("Envoyé au serveur : {}", message);
         } else {
-            journal.error("Impossible d'envoyer le message, non connecté ou flux de sortie nul.");
+            journal.error("Impossible d'envoyer le message, non connecté ou flux de sortie nul. Message: {}", message);
             Platform.runLater(() -> AlertesUtilisateur.afficherErreur(
                     paquetRessourcesI18n.getString("error.send.message.title"),
                     paquetRessourcesI18n.getString("error.send.message.notconnected.content")
             ));
-            if(estActuellementConnecte()){
+            if (estActuellementConnecte()) { // Si l'état est incohérent
                 deconnecterDuServeur();
             }
         }
     }
 
-    private void envoyerRequeteAvecParametres(TypeRequeteClient typeRequete, String... parametres) {
-        StringBuilder sb = new StringBuilder(typeRequete.name());
-        for (String param : parametres) {
-            // S'assurer que le délimiteur n'est pas ajouté si le paramètre est vide et qu'il n'y a qu'un seul paramètre (la commande elle-même)
-            if (param != null && !param.isEmpty()) {
-                sb.append(ConstantesProtocoleBMO.DELIMITEUR_COMMANDE).append(param);
-            } else if (param == null && parametres.length > 1) { // Gérer le cas d'un paramètre null explicite
-                sb.append(ConstantesProtocoleBMO.DELIMITEUR_COMMANDE);
-            }
-        }
-        envoyerMessageAuServeur(sb.toString());
+    private void envoyerRequeteAvecPayloadJson(TypeRequeteClient typeRequete, String payloadJson) {
+        String requete = typeRequete.name() + (payloadJson == null || payloadJson.isEmpty() ? "" : ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + payloadJson);
+        envoyerMessageAuServeur(requete);
     }
 
-    private void envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient typeRequete, Object dto) {
-        if (!estActuellementConnecte()) {
-            journal.warn("Tentative d'envoi de requête {} alors que non connecté.", typeRequete.name());
-            return;
-        }
-        try {
-            String jsonPayload = "";
-            if (dto == null) {
-                // Envoyer uniquement la commande
-            } else if (dto instanceof DetailsReunionDTO) {
-                jsonPayload = ((DetailsReunionDTO) dto).toJsonString();
-            } else if (dto instanceof DonneesUtilisateurDTO) {
-                jsonPayload = ((DonneesUtilisateurDTO) dto).toJsonString();
-            } else if (dto instanceof MessageChatDTO) {
-                jsonPayload = ((MessageChatDTO) dto).toJsonString();
-            } else if (dto instanceof JSONObject) { // Pour les cas où on construit le JSON manuellement
-                jsonPayload = ((JSONObject) dto).toString();
-            } else {
-                journal.error("Type de DTO non supporté pour la sérialisation JSON directe: {}", dto.getClass().getName());
-                return;
-            }
-
-            String requete = typeRequete.name() + (jsonPayload.isEmpty() ? "" : ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + jsonPayload);
-            envoyerMessageAuServeur(requete);
-        } catch (JSONException e) {
-            journal.error("Erreur de conversion DTO en JSON pour la requête {} : {}", typeRequete.name(), e.getMessage());
-        }
+    private void envoyerRequeteSimple(TypeRequeteClient typeRequete) {
+        envoyerRequeteAvecPayloadJson(typeRequete, null);
     }
+
 
     private void lancerEcouteServeur() {
-        if (serviceEcouteServeur.isShutdown()) {
+        if (serviceEcouteServeur.isShutdown() || serviceEcouteServeur.isTerminated()) {
             initialiserServiceEcoute();
         }
         doitEcouter = true;
         serviceEcouteServeur.submit(() -> {
             try {
                 String ligneDuServeur;
-                // Vérifier fluxEntree != null dans la condition de la boucle
                 while (doitEcouter && fluxEntree != null && (ligneDuServeur = fluxEntree.readLine()) != null) {
                     journal.debug("Reçu du serveur : {}", ligneDuServeur);
                     traiterReponseServeur(ligneDuServeur);
                 }
             } catch (SocketException e) {
                 if (doitEcouter) {
-                    journal.error("SocketException lors de la lecture du serveur (déconnexion probable) : {}.", e.getMessage());
-                    deconnecterDuServeur();
+                    journal.error("SocketException (serveur potentiellement arrêté ou connexion perdue): {}. Déconnexion.", e.getMessage());
+                    deconnecterDuServeur(); // Assure une déconnexion propre côté client
                     Platform.runLater(() -> AlertesUtilisateur.afficherErreur(
                             paquetRessourcesI18n.getString("error.connection.lost.title"),
-                            paquetRessourcesI18n.getString("error.connection.lost.content") // Ne pas ajouter e.getMessage() directement à l'utilisateur
+                            paquetRessourcesI18n.getString("error.connection.lost.content.socket")
                     ));
+                } else {
+                    journal.info("SocketException reçue pendant l'arrêt contrôlé du thread d'écoute.");
                 }
             } catch (IOException e) {
                 if (doitEcouter) {
-                    journal.error("IOException lors de la lecture du serveur : {}.", e.getMessage());
+                    journal.error("IOException lors de la lecture du serveur : {}. Déconnexion.", e.getMessage());
                     deconnecterDuServeur();
+                    Platform.runLater(() -> AlertesUtilisateur.afficherErreur(
+                            paquetRessourcesI18n.getString("error.connection.lost.title"),
+                            paquetRessourcesI18n.getString("error.connection.lost.content.io")
+                    ));
                 }
             } finally {
-                if (doitEcouter) {
-                    journal.info("Thread d'écoute serveur terminé de manière inattendue. Déconnexion.");
-                    deconnecterDuServeur();
-                } else {
-                    journal.info("Thread d'écoute serveur arrêté.");
+                journal.info("Thread d'écoute serveur terminé.");
+                if (doitEcouter) { // Si la boucle s'est terminée mais qu'on est censé écouter
+                    deconnecterDuServeur(); // Assure que l'état est mis à jour
                 }
             }
         });
@@ -284,13 +244,11 @@ public class ServiceCommunicationServeur {
                 switch (typeReponse) {
                     case AUTH_OK:
                         if (donneesJsonString != null) {
-                            DonneesUtilisateurDTO utilisateurAuth = DonneesUtilisateurDTO.fromJson(donneesJsonString);
-                            serviceSessionUtilisateur.definirSession(utilisateurAuth);
+                            serviceSessionUtilisateur.definirSession(DonneesUtilisateurDTO.fromJson(donneesJsonString));
                             dernierMessageErreurAuth.set("");
                         } else {
                             journal.error("Données manquantes pour AUTH_OK");
                             dernierMessageErreurAuth.set(paquetRessourcesI18n.getString("error.auth.generic"));
-                            serviceSessionUtilisateur.viderSession();
                         }
                         break;
                     case AUTH_ECHEC:
@@ -298,35 +256,37 @@ public class ServiceCommunicationServeur {
                         serviceSessionUtilisateur.viderSession();
                         break;
                     case INSCRIPTION_OK:
-                        AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("signup.success.title"), paquetRessourcesI18n.getString("signup.success.content"));
+                        AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("signup.success.title"), donneesJsonString != null ? donneesJsonString : paquetRessourcesI18n.getString("signup.success.content"));
                         break;
                     case INSCRIPTION_ECHEC:
                         dernierMessageErreurAuth.set(donneesJsonString != null ? donneesJsonString : paquetRessourcesI18n.getString("error.signup.generic"));
                         break;
                     case LISTE_REUNIONS:
+                    case LISTE_MES_REUNIONS: // Les deux mettent à jour des listes différentes ou la même
                         if (donneesJsonString != null) {
-                            JSONArray reunionsArr = new JSONArray(donneesJsonString);
-                            List<DetailsReunionDTO> listeR = new ArrayList<>();
-                            for (int i = 0; i < reunionsArr.length(); i++) {
-                                listeR.add(DetailsReunionDTO.fromJson(reunionsArr.getJSONObject(i).toString()));
+                            JSONArray reunionsJson = new JSONArray(donneesJsonString);
+                            List<DetailsReunionDTO> reunions = new ArrayList<>();
+                            for (int i = 0; i < reunionsJson.length(); i++) {
+                                reunions.add(DetailsReunionDTO.fromJson(reunionsJson.getJSONObject(i).toString()));
                             }
-                            listeToutesReunions.setAll(listeR);
-                        }
-                        break;
-                    case LISTE_MES_REUNIONS: // Corrigé pour correspondre au type enum
-                        if (donneesJsonString != null) {
-                            JSONArray mesReunionsArr = new JSONArray(donneesJsonString);
-                            List<DetailsReunionDTO> listeMR = new ArrayList<>();
-                            for (int i = 0; i < mesReunionsArr.length(); i++) {
-                                listeMR.add(DetailsReunionDTO.fromJson(mesReunionsArr.getJSONObject(i).toString()));
+                            if (typeReponse == TypeReponseServeur.LISTE_REUNIONS) {
+                                listeToutesReunions.setAll(reunions);
+                            } else {
+                                listeMesReunions.setAll(reunions);
                             }
-                            listeMesReunions.setAll(listeMR);
                         }
                         break;
                     case DETAILS_REUNION:
                     case REUNION_CREEE:
-                    case REUNION_MODIFIEE:
-                    case REUNION_REJOINTE:
+                    case REUNION_OUVERTE: // Le serveur peut renvoyer les détails mis à jour
+                        if (donneesJsonString != null) {
+                            detailsReunionActuelle.set(DetailsReunionDTO.fromJson(donneesJsonString));
+                            if(typeReponse == TypeReponseServeur.REUNION_CREEE){
+                                AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("meeting.creation.success.title"), paquetRessourcesI18n.getString("meeting.creation.success.content"));
+                            }
+                        }
+                        break;
+                    case REJOINDRE_OK:
                         if (donneesJsonString != null) {
                             detailsReunionActuelle.set(DetailsReunionDTO.fromJson(donneesJsonString));
                         }
@@ -346,12 +306,12 @@ public class ServiceCommunicationServeur {
                             historiqueMessagesReunion.setAll(hist);
                         }
                         break;
-                    case PROFIL_UTILISATEUR: // Corrigé pour correspondre au type enum
+                    case DONNEES_UTILISATEUR: // Pour OBTENIR_MON_PROFIL
                         if (donneesJsonString != null) {
                             profilUtilisateurActuel.set(DonneesUtilisateurDTO.fromJson(donneesJsonString));
                         }
                         break;
-                    case LISTE_UTILISATEURS: // Corrigé pour correspondre au type enum
+                    case LISTE_UTILISATEURS: // Pour ADMIN_LISTER_UTILISATEURS
                         if (donneesJsonString != null) {
                             JSONArray utilisateursArr = new JSONArray(donneesJsonString);
                             List<DonneesUtilisateurDTO> listeU = new ArrayList<>();
@@ -361,23 +321,29 @@ public class ServiceCommunicationServeur {
                             listeGlobaleUtilisateurs.setAll(listeU);
                         }
                         break;
-                    case UTILISATEUR_MODIFIE: // Corrigé pour correspondre au type enum
+                    case ADMIN_UTILISATEUR_MODIFIE:
                         if (donneesJsonString != null) {
                             utilisateurMisAJourParAdmin.set(DonneesUtilisateurDTO.fromJson(donneesJsonString));
-                            // AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("admin.user.update.success.title"), paquetRessourcesI18n.getString("admin.user.update.success.content"));
+                            AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("admin.user.update.success.title"), paquetRessourcesI18n.getString("admin.user.update.success.content"));
                         }
                         break;
                     case UTILISATEUR_REJOINT_REUNION:
                         if (donneesJsonString != null) {
-                            notificationUtilisateurRejoint.set(DonneesUtilisateurDTO.fromJson(donneesJsonString));
+                            // Le payload devrait être { "idReunion": X, "utilisateur": DonneesUtilisateurDTO_JSON }
+                            JSONObject joinPayload = new JSONObject(donneesJsonString);
+                            // long idReunionJoin = joinPayload.getLong("idReunion"); // Pour vérifier si c'est la réunion actuelle
+                            notificationUtilisateurRejoint.set(DonneesUtilisateurDTO.fromJson(joinPayload.getJSONObject("utilisateur").toString()));
                         }
                         break;
                     case UTILISATEUR_QUITTE_REUNION:
                         if (donneesJsonString != null) {
-                            notificationUtilisateurQuitte.set(DonneesUtilisateurDTO.fromJson(donneesJsonString));
+                            JSONObject quitPayload = new JSONObject(donneesJsonString);
+                            // long idReunionQuit = quitPayload.getLong("idReunion");
+                            notificationUtilisateurQuitte.set(DonneesUtilisateurDTO.fromJson(quitPayload.getJSONObject("utilisateur").toString()));
                         }
                         break;
                     case NOTIFICATION_REUNION_CLOTUREE:
+                    case REUNION_CLOTUREE: // Le serveur envoie l'ID de la réunion clôturée
                         if (donneesJsonString != null) {
                             try {
                                 notificationReunionClotureeId.set(Integer.parseInt(donneesJsonString));
@@ -393,21 +359,22 @@ public class ServiceCommunicationServeur {
                             try {
                                 JSONObject errJson = new JSONObject(donneesJsonString);
                                 messageErreur = errJson.optString("message", messageErreur);
-                                codeErreur = errJson.optString("code", ""); // "code" est plus générique que "codeErreur"
-                            } catch (JSONException e) {
-                                messageErreur = donneesJsonString;
-                            }
+                                codeErreur = errJson.optString("codeErreur", "");
+                            } catch (JSONException e) { messageErreur = donneesJsonString; }
                         }
                         AlertesUtilisateur.afficherErreur(paquetRessourcesI18n.getString("error.server.title") + (codeErreur.isEmpty() ? "" : " ("+codeErreur+")"), messageErreur);
                         break;
+                    case OPERATION_OK: // Pour déconnexion, etc.
+                        // Pas besoin d'alerte spécifique souvent, l'UI réagira à la déconnexion de session.
+                        break;
                     default:
-                        journal.warn("Traitement non implémenté pour le type de réponse serveur : {}", typeReponse);
+                        journal.warn("Traitement UI non implémenté pour le type de réponse serveur : {}", typeReponse);
                 }
             } catch (JSONException e) {
-                journal.error("Erreur de parsing JSON pour la réponse {} : {}", typeReponse, e.getMessage(), e);
+                journal.error("Erreur de parsing JSON pour la réponse {} avec payload '{}': {}", typeReponse, donneesJsonString, e.getMessage(), e);
                 AlertesUtilisateur.afficherErreur(paquetRessourcesI18n.getString("error.json.parsing.title"), paquetRessourcesI18n.getString("error.json.parsing.content") + "\n" + reponseBrute);
-            } catch (Exception e) { // Capture plus large pour les erreurs inattendues
-                journal.error("Erreur inattendue lors du traitement de la réponse {} : {}", typeReponse, e.getMessage(), e);
+            } catch (Exception e) {
+                journal.error("Erreur inattendue lors du traitement de la réponse UI {} : {}", typeReponse, e.getMessage(), e);
                 AlertesUtilisateur.afficherErreur(paquetRessourcesI18n.getString("error.response.processing.title"), paquetRessourcesI18n.getString("error.response.processing.content") + "\n" + e.getMessage());
             }
         });
@@ -418,10 +385,8 @@ public class ServiceCommunicationServeur {
         try {
             json.put("identifiant", identifiant);
             json.put("motDePasse", motDePasse);
-            envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient.CONNEXION, json);
-        } catch (JSONException e) {
-            journal.error("Erreur création JSON pour connexion: {}", e.getMessage());
-        }
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.CONNEXION, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Connexion: {}", e.getMessage());}
     }
 
     public void envoyerRequeteInscription(String identifiant, String motDePasse, String nomComplet) {
@@ -430,86 +395,123 @@ public class ServiceCommunicationServeur {
             json.put("identifiant", identifiant);
             json.put("motDePasse", motDePasse);
             json.put("nomComplet", nomComplet);
-            envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient.INSCRIPTION, json);
-        } catch (JSONException e) {
-            journal.error("Erreur création JSON pour inscription: {}", e.getMessage());
-        }
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.INSCRIPTION, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Inscription: {}", e.getMessage());}
     }
 
     public void envoyerRequeteDeconnexion() {
-        envoyerRequeteAvecParametres(TypeRequeteClient.DECONNEXION);
+        envoyerRequeteSimple(TypeRequeteClient.DECONNEXION);
     }
 
     public void envoyerRequeteCreationReunion(DetailsReunionDTO details) {
-        envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient.NOUVELLE_REUNION, details);
+        try {
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.NOUVELLE_REUNION, details.toJsonString());
+        } catch (JSONException e) {journal.error("Erreur JSON Création Réunion: {}", e.getMessage());}
     }
 
     public void envoyerRequeteModificationReunion(DetailsReunionDTO details) {
-        envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient.MODIFIER_REUNION, details);
+        try {
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.MODIFIER_REUNION, details.toJsonString());
+        } catch (JSONException e) {journal.error("Erreur JSON Modification Réunion: {}", e.getMessage());}
     }
 
+
     public void envoyerRequeteObtenirToutesLesReunions() {
-        envoyerRequeteAvecParametres(TypeRequeteClient.OBTENIR_REUNIONS);
+        envoyerRequeteSimple(TypeRequeteClient.OBTENIR_REUNIONS);
     }
 
     public void envoyerRequeteObtenirMesReunions() {
-        envoyerRequeteAvecParametres(TypeRequeteClient.OBTENIR_MES_REUNIONS);
+        envoyerRequeteSimple(TypeRequeteClient.OBTENIR_MES_REUNIONS);
     }
 
     public void envoyerRequeteObtenirDetailsReunion(long idReunion) {
-        envoyerRequeteAvecParametres(TypeRequeteClient.OBTENIR_DETAILS_REUNION, String.valueOf(idReunion));
+        JSONObject json = new JSONObject();
+        try { json.put("idReunion", idReunion);
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.OBTENIR_DETAILS_REUNION, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Obtenir Détails Réunion: {}", e.getMessage());}
     }
 
-    public void envoyerRequeteRejoindreReunion(long idReunion) {
-        envoyerRequeteAvecParametres(TypeRequeteClient.REJOINDRE_REUNION, String.valueOf(idReunion));
+    public void envoyerRequeteRejoindreReunion(long idReunion, String motDePasseFourni) {
+        JSONObject json = new JSONObject();
+        try {
+            json.put("idReunion", idReunion);
+            if (motDePasseFourni != null) {
+                json.put("motDePasseFourni", motDePasseFourni);
+            }
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.REJOINDRE_REUNION, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Rejoindre Réunion: {}", e.getMessage());}
     }
 
     public void envoyerRequeteQuitterReunion(long idReunion) {
-        envoyerRequeteAvecParametres(TypeRequeteClient.QUITTER_REUNION, String.valueOf(idReunion));
+        JSONObject json = new JSONObject();
+        try { json.put("idReunion", idReunion);
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.QUITTER_REUNION, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Quitter Réunion: {}", e.getMessage());}
     }
 
-    public void envoyerRequeteMessageChat(MessageChatDTO message) {
-        envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient.MESSAGE_CHAT, message);
+    public void envoyerMessageChat(MessageChatDTO message) {
+        try {
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.MESSAGE_CHAT, message.toJsonString());
+        } catch (JSONException e) {journal.error("Erreur JSON Message Chat: {}", e.getMessage());}
     }
 
     public void envoyerRequeteOuvrirReunion(long idReunion) {
-        envoyerRequeteAvecParametres(TypeRequeteClient.OUVRIR_REUNION, String.valueOf(idReunion));
+        JSONObject json = new JSONObject();
+        try { json.put("idReunion", idReunion);
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.OUVRIR_REUNION, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Ouvrir Réunion: {}", e.getMessage());}
     }
 
     public void envoyerRequeteCloturerReunion(long idReunion) {
-        envoyerRequeteAvecParametres(TypeRequeteClient.CLOTURER_REUNION, String.valueOf(idReunion));
+        JSONObject json = new JSONObject();
+        try { json.put("idReunion", idReunion);
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.CLOTURER_REUNION, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Clore Réunion: {}", e.getMessage());}
     }
 
     public void envoyerRequeteObtenirHistoriqueMessages(long idReunion) {
-        envoyerRequeteAvecParametres(TypeRequeteClient.OBTENIR_HISTORIQUE_MESSAGES, String.valueOf(idReunion));
+        JSONObject json = new JSONObject();
+        try { json.put("idReunion", idReunion);
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.OBTENIR_HISTORIQUE_MESSAGES, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Historique Messages: {}", e.getMessage());}
     }
 
     public void envoyerRequeteObtenirMonProfil() {
-        envoyerRequeteAvecParametres(TypeRequeteClient.OBTENIR_MON_PROFIL);
+        envoyerRequeteSimple(TypeRequeteClient.OBTENIR_MON_PROFIL);
     }
 
-    public void envoyerRequeteModifierProfil(DonneesUtilisateurDTO donneesUtilisateur) {
-        envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient.MODIFIER_PROFIL, donneesUtilisateur);
+    public void envoyerRequeteModifierProfil(String nomComplet, String identifiant) {
+        JSONObject json = new JSONObject();
+        try {
+            if (nomComplet != null) json.put("nomComplet", nomComplet);
+            if (identifiant != null) json.put("identifiant", identifiant);
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.MODIFIER_PROFIL, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Modifier Profil: {}", e.getMessage());}
     }
 
     public void envoyerRequeteChangerMotDePasse(String ancienMotDePasse, String nouveauMotDePasse) {
         JSONObject json = new JSONObject();
         try {
-            json.put("ancienMotDePasse", ancienMotDePasse);
+            json.put("motDePasseActuel", ancienMotDePasse);
             json.put("nouveauMotDePasse", nouveauMotDePasse);
-            envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient.CHANGER_MOT_DE_PASSE, json);
-        } catch (JSONException e) {
-            journal.error("Erreur création JSON pour changer MDP: {}", e.getMessage());
-        }
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.CHANGER_MOT_DE_PASSE, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Changer MDP: {}", e.getMessage());}
     }
 
-    public void envoyerRequeteAdminObtenirUtilisateurs(String filtreNomOuIdentifiant) {
-        envoyerRequeteAvecParametres(TypeRequeteClient.ADMIN_LISTER_UTILISATEURS, filtreNomOuIdentifiant == null ? "" : filtreNomOuIdentifiant);
+    public void envoyerRequeteAdminObtenirUtilisateurs(String filtre) {
+        JSONObject json = new JSONObject();
+        try {
+            if(filtre != null && !filtre.isEmpty()) json.put("filtre", filtre);
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.ADMIN_OBTENIR_UTILISATEURS, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Admin Lister Utilisateurs: {}", e.getMessage());}
     }
 
     public void envoyerRequeteAdminModifierUtilisateur(DonneesUtilisateurDTO dto) {
-        envoyerRequeteAvecDonneesJsonViaDTO(TypeRequeteClient.ADMIN_MODIFIER_UTILISATEUR, dto);
+        try {
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.ADMIN_MODIFIER_UTILISATEUR, dto.toJsonString());
+        } catch (JSONException e) {journal.error("Erreur JSON Admin Modifier Utilisateur: {}", e.getMessage());}
     }
+
 
     public StringProperty dernierMessageErreurAuthProperty() { return dernierMessageErreurAuth; }
     public ObjectProperty<MessageChatDTO> dernierMessageChatRecuProperty() { return dernierMessageChatRecu; }
@@ -522,7 +524,7 @@ public class ServiceCommunicationServeur {
     public BooleanProperty etatConnexionServeurProperty() { return etatConnexionServeur; }
     public ObjectProperty<DonneesUtilisateurDTO> notificationUtilisateurRejointProperty() { return notificationUtilisateurRejoint; }
     public ObjectProperty<DonneesUtilisateurDTO> notificationUtilisateurQuitteProperty() { return notificationUtilisateurQuitte; }
+    public ObjectProperty<DetailsReunionDTO> notificationReunionMiseAJourProperty() { return notificationReunionMiseAJour; }
     public IntegerProperty notificationReunionClotureeIdProperty() { return notificationReunionClotureeId; }
     public ObjectProperty<DonneesUtilisateurDTO> utilisateurMisAJourParAdminProperty() { return utilisateurMisAJourParAdmin;}
-
 }
