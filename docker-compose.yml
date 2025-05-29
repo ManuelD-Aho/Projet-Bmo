@@ -1,6 +1,4 @@
-# Définition des services de l'application
 services:
-
   # Service pour la base de données MySQL
   bmo-db:
     image: mysql:8.3
@@ -61,21 +59,24 @@ services:
     environment:
       PMA_HOST: bmo-db
       PMA_PORT: 3306
-      UPLOAD_LIMIT: 1G
+      # Configuration pour la connexion automatique avec l'utilisateur de l'application BMO
+      # phpMyAdmin utilisera la méthode d'authentification 'config' avec ces identifiants.
+      PMA_USER: ${BMO_DB_USER:-bmo_utilisateur_app}
+      PMA_PASSWORD: ${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}
     networks:
       - bmo_reseau_interne
 
-  # Service pour l'application client BMO (Optionnel)
+  # Service pour l'application client BMO (Optionnel - décommentez si besoin)
   # bmo-client-app:
   #   build:
-  #     context: . # Contexte à la racine aussi si vous construisez le client
+  #     context: .
   #     dockerfile: bmo-client/Dockerfile
   #   container_name: bmo_client_conteneur
   #   restart: "no"
   #   environment:
-  #     DISPLAY: ${DISPLAY}
+  #     DISPLAY: ${DISPLAY} # Nécessaire pour les applications GUI sous Linux
   #   volumes:
-  #     - /tmp/.X11-unix:/tmp/.X11-unix:rw
+  #     - /tmp/.X11-unix:/tmp/.X11-unix:rw # Montage du socket X11 (Linux)
   #   networks:
   #     - bmo_reseau_interne
   #   depends_on:
@@ -86,7 +87,7 @@ networks:
   bmo_reseau_interne:
     driver: bridge
 
-# Définition des volumes nommés
+# Définition des volumes nommés (pour la persistance des données)
 volumes:
   bmo_donnees_mysql_volume:
     driver: local

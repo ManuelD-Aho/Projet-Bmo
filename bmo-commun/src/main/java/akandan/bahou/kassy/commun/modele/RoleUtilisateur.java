@@ -18,5 +18,5 @@ public enum RoleUtilisateur {
     /**
      * Rôle de participant, peut rejoindre des réunions et interagir.
      */
-    PARTICIPANT;
+    PARTICIPANT, GESTIONNAIRE;
 }

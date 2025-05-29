@@ -27,24 +27,8 @@
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
         </dependency>
-        <!-- Optionnel: HikariCP si besoin d'un pool de connexion plus avancé -->
-        <!--
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-            <version>LATEST_STABLE_VERSION</version>
-        </dependency>
-        -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
-            <scope>test</scope>
-        </dependency>
+
+        <!-- Dépendances de Test (JUnit 5 et Mockito) supprimées -->
     </dependencies>
 
     <build>

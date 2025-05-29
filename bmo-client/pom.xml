@@ -31,16 +31,8 @@
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
-            <scope>test</scope>
-        </dependency>
+
+        <!-- Dépendances de Test (JUnit 5 et Mockito) supprimées -->
     </dependencies>
 
     <build>
@@ -48,7 +40,6 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <!-- La configuration est héritée du parent, mais on peut la surcharger si besoin -->
             </plugin>
             <plugin>
                 <groupId>org.openjfx</groupId>
@@ -56,7 +47,6 @@
                 <version>${javafx.maven.plugin.version}</version>
                 <executions>
                     <execution>
-                        <!-- Default configuration for running with javafx:run -->
                         <id>default-cli</id>
                         <configuration>
                             <mainClass>akandan.bahou.kassy.client.coeur.AppPrincipale</mainClass>
@@ -64,24 +54,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Alternative avec maven-shade-plugin si javafx-maven-plugin ne convient pas pour le packaging final -->
-            <!--
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <configuration>
-                    <transformers>
-                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                            <manifestEntries>
-                                <Main-Class>akandan.bahou.kassy.client.coeur.AppPrincipaleLauncher</Main-Class>
-                                <X-JavaFX-Main-Class>akandan.bahou.kassy.client.coeur.AppPrincipale</X-JavaFX-Main-Class>
-                            </manifestEntries>
-                        </transformer>
-                    </transformers>
-                    <finalName>${project.artifactId}-uber</finalName>
-                </configuration>
-            </plugin>
-            -->
         </plugins>
     </build>
 </project>
