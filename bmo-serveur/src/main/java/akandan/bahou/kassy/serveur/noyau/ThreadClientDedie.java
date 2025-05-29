@@ -77,11 +77,11 @@ public class ThreadClientDedie implements Runnable {
         }
         try {
             if (this.fluxSortieVersClient != null) this.fluxSortieVersClient.close();
-        } catch (Exception e) { // PrintWriter.close() ne lève pas IOException.
+        } catch (Exception e) {
             journal.warn("Erreur lors de la fermeture du flux de sortie pour {}.", this.socketClientCommunication.getRemoteSocketAddress(), e);
         }
         try {
-            if (this.socketClientCommunication != null && !this.socketClientCommunication.isClosed()) this.socketClientCommunication.close();
+            if (!this.socketClientCommunication.isClosed()) this.socketClientCommunication.close();
         } catch (IOException e) {
             journal.warn("Erreur lors de la fermeture du socket client pour {}.", this.socketClientCommunication.getRemoteSocketAddress(), e);
         }
@@ -110,5 +110,9 @@ public class ThreadClientDedie implements Runnable {
 
     public Socket getSocketClientCommunication() {
         return this.socketClientCommunication;
+    }
+
+    public void setClientConnecte(boolean clientConnecte) {
+        this.clientConnecte = clientConnecte;
     }
 }

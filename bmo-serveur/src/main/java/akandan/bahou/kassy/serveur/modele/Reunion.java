@@ -20,18 +20,6 @@ public class Reunion {
     public Reunion() {
     }
 
-    public Reunion(String titre, String ordreDuJour, LocalDateTime dateHeureDebut, int dureeMinutes, TypeReunion typeReunion, StatutReunion statutReunion, int organisateurId, String motDePasseOptionnel, LocalDateTime dateCreationReunion) {
-        this.titre = titre;
-        this.ordreDuJour = ordreDuJour;
-        this.dateHeureDebut = dateHeureDebut;
-        this.dureeMinutes = dureeMinutes;
-        this.typeReunion = typeReunion;
-        this.statutReunion = statutReunion;
-        this.organisateurId = organisateurId;
-        this.motDePasseOptionnel = motDePasseOptionnel;
-        this.dateCreationReunion = dateCreationReunion;
-    }
-
     public int getId() {
         return id;
     }
@@ -102,10 +90,6 @@ public class Reunion {
 
     public void setMotDePasseOptionnel(String motDePasseOptionnel) {
         this.motDePasseOptionnel = motDePasseOptionnel;
-    }
-
-    public LocalDateTime getDateCreationReunion() {
-        return dateCreationReunion;
     }
 
     public void setDateCreationReunion(LocalDateTime dateCreationReunion) {

@@ -13,13 +13,6 @@ public class MessageChat {
     public MessageChat() {
     }
 
-    public MessageChat(int idReunion, int idUtilisateurEmetteur, String contenuMessage, LocalDateTime horodatage) {
-        this.idReunion = idReunion;
-        this.idUtilisateurEmetteur = idUtilisateurEmetteur;
-        this.contenuMessage = contenuMessage;
-        this.horodatage = horodatage;
-    }
-
     public long getIdMessage() {
         return idMessage;
     }

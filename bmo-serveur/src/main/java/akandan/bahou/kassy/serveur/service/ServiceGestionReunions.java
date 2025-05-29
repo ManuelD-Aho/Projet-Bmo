@@ -18,7 +18,6 @@ import akandan.bahou.kassy.serveur.noyau.ThreadClientDedie;
 import akandan.bahou.kassy.commun.protocole.TypeReponseServeur;
 
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -66,7 +65,7 @@ public class ServiceGestionReunions {
             journal.warn("Impossible de récupérer le nom de l'organisateur ID {} pour la réunion ID {}: {}", entite.getOrganisateurId(), entite.getId(), e.getMessage());
             dto.setNomOrganisateur("Inconnu");
         }
-        dto.setMotDePasseOptionnel(entite.getMotDePasseOptionnel() != null && !entite.getMotDePasseOptionnel().isEmpty()); // Indique si un mdp est défini
+        dto.setMotDePasseOptionnelValeur(entite.getMotDePasseOptionnel());
 
         return dto;
     }
@@ -90,7 +89,6 @@ public class ServiceGestionReunions {
             nouvelleReunionEntite.setOrganisateurId(idOrganisateur);
             if (typeReunion == TypeReunion.PRIVEE && (motDePasseOptionnel == null || motDePasseOptionnel.trim().isEmpty())) {
                 journal.warn("Tentative de création d'une réunion privée sans mot de passe par l'utilisateur ID {}", idOrganisateur);
-                // Selon la politique, on pourrait rejeter ou générer un mot de passe. Ici, on le permet vide.
             }
             nouvelleReunionEntite.setMotDePasseOptionnel(motDePasseOptionnel != null ? motDePasseOptionnel.trim() : null);
             nouvelleReunionEntite.setDateCreationReunion(LocalDateTime.now());
@@ -127,11 +125,6 @@ public class ServiceGestionReunions {
     public List<DetailsReunionDTO> listerReunionsParUtilisateur(int idUtilisateur) throws ExceptionPersistance {
         journal.debug("Listage des réunions pour l'utilisateur ID {}.", idUtilisateur);
         List<Reunion> reunionsOrganisees = this.reunionDAO.trouverParOrganisateurId(idUtilisateur);
-        // Pour inclure les réunions auxquelles l'utilisateur participe mais n'organise pas:
-        // 1. Récupérer les IDs des réunions où l'utilisateur est participant via participationReunionDAO
-        // 2. Pour chaque ID, récupérer les détails de la réunion via reunionDAO.trouverParId()
-        // 3. Fusionner et dédoublonner les listes.
-        // Simplification pour ce prompt: on ne retourne que celles organisées.
         return reunionsOrganisees.stream()
                 .map(this::convertirEntiteReunionVersDTO)
                 .collect(Collectors.toList());
@@ -164,20 +157,19 @@ public class ServiceGestionReunions {
                 return new ReponseGeneriqueDTO(false, "La réunion n'est pas ouverte.", "REUNION_NON_OUVERTE");
             }
             if (reunionEntite.getTypeReunion() == TypeReunion.PRIVEE) {
-                if (reunionEntite.getMotDePasseOptionnel() == null || reunionEntite.getMotDePasseOptionnel().isEmpty()) {
+                String motDePasseReunion = reunionEntite.getMotDePasseOptionnel();
+                if (motDePasseReunion == null || motDePasseReunion.isEmpty()) {
                     journal.warn("Réunion privée ID {} sans mot de passe défini, accès refusé par mesure de sécurité.", idReunion);
                     return new ReponseGeneriqueDTO(false, "Cette réunion privée est mal configurée (pas de mot de passe).", "REUNION_PRIVEE_MDP_MANQUANT");
                 }
-                if (!reunionEntite.getMotDePasseOptionnel().equals(motDePasseFourni)) {
+                if (!motDePasseReunion.equals(motDePasseFourni)) {
                     return new ReponseGeneriqueDTO(false, "Mot de passe incorrect pour la réunion privée.", "MDP_INCORRECT");
                 }
             }
 
-            // Vérifier si l'utilisateur est déjà participant, sinon l'ajouter
             RoleDansReunion roleExistant = participationReunionDAO.recupererRoleDansReunion(idReunion, idUtilisateur);
             if (roleExistant == null) {
-                // Si non listé, c'est un nouveau participant (non-organisateur)
-                this.participationReunionDAO.ajouterParticipant(idReunion, idUtilisateur, RoleDansReunion.PARTICIPANT, StatutParticipationReunion.INVITE); // Statut initial, sera mis à jour
+                this.participationReunionDAO.ajouterParticipant(idReunion, idUtilisateur, RoleDansReunion.PARTICIPANT, StatutParticipationReunion.INVITE);
             }
 
             boolean majStatut = this.participationReunionDAO.mettreAJourStatutParticipation(idReunion, idUtilisateur, StatutParticipationReunion.REJOINT);
@@ -199,7 +191,7 @@ public class ServiceGestionReunions {
         journal.debug("Tentative de l'utilisateur ID {} de quitter la réunion ID {}.", idUtilisateur, idReunion);
         try {
             boolean majStatut = this.participationReunionDAO.mettreAJourStatutParticipation(idReunion, idUtilisateur, StatutParticipationReunion.PARTI);
-            this.serviceCommunication.retirerParticipantConnecte(idReunion, clientThread); // Toujours retirer, même si majStatut échoue pour une raison de BD
+            this.serviceCommunication.retirerParticipantConnecte(idReunion, clientThread);
             if(majStatut) {
                 journal.info("Utilisateur ID {} a quitté la réunion ID {}.", idUtilisateur, idReunion);
                 return new ReponseGeneriqueDTO(true, "Vous avez quitté la réunion.");
@@ -209,7 +201,6 @@ public class ServiceGestionReunions {
             }
         } catch (ExceptionPersistance e) {
             journal.error("Erreur de persistance en tentant de quitter la réunion ID {}: {}", idReunion, e.getMessage(), e);
-            // On retire quand même de la communication en cas d'erreur BD pour éviter des diffusions fantômes
             this.serviceCommunication.retirerParticipantConnecte(idReunion, clientThread);
             return new ReponseGeneriqueDTO(false, "Erreur serveur lors de la tentative de quitter la réunion.", "ERREUR_SERVEUR_QUITTER");
         }
@@ -233,8 +224,6 @@ public class ServiceGestionReunions {
             boolean succesMAJ = this.reunionDAO.mettreAJour(reunionEntite);
             if (succesMAJ) {
                 journal.info("Réunion ID {} ouverte par l'organisateur ID {}.", idReunion, idOrganisateurDemandeur);
-                // Notifier (par exemple, l'organisateur lui-même via sa connexion)
-                // serviceCommunication.notifierChangementStatutReunion(...);
                 return new ReponseGeneriqueDTO(true, "Réunion ouverte avec succès.");
             } else {
                 return new ReponseGeneriqueDTO(false, "Échec de la mise à jour du statut de la réunion.", "MAJ_STATUT_REUNION_ECHEC");

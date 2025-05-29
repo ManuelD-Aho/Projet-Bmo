@@ -88,10 +88,6 @@ public class Utilisateur {
         this.statutCompte = statutCompte;
     }
 
-    public LocalDateTime getDateCreationCompte() {
-        return dateCreationCompte;
-    }
-
     public void setDateCreationCompte(LocalDateTime dateCreationCompte) {
         this.dateCreationCompte = dateCreationCompte;
     }

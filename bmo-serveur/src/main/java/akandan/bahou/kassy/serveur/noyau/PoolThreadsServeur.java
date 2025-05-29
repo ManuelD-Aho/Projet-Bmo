@@ -11,12 +11,11 @@ public class PoolThreadsServeur {
 
     private final ExecutorService executeurDeTaches;
     private static final Logger journal = LoggerFactory.getLogger(PoolThreadsServeur.class);
-    private final int tailleMaximalePool;
 
     public PoolThreadsServeur(ConfigurateurServeur configurateur) {
-        this.tailleMaximalePool = configurateur.recupererProprieteEntier("bmo.poolthreads.taillemaximale", 10);
-        this.executeurDeTaches = Executors.newFixedThreadPool(this.tailleMaximalePool);
-        journal.info("Pool de threads serveur initialisé avec une taille maximale de {}.", this.tailleMaximalePool);
+        int tailleMaximaleDuPool = configurateur.recupererProprieteEntier("bmo.poolthreads.taillemaximale", 10);
+        this.executeurDeTaches = Executors.newFixedThreadPool(tailleMaximaleDuPool);
+        journal.info("Pool de threads serveur initialisé avec une taille maximale de {}.", tailleMaximaleDuPool);
     }
 
     public void soumettreTache(Runnable tache) {

@@ -1,10 +1,6 @@
-version: '3.8'
-
-# Ce fichier docker-compose orchestre les services de l'application BMO.
-
 services:
   bmo-db:
-    image: mysql:8.0
+    image: mysql:8.3
     container_name: bmo_mysql_db
     restart: unless-stopped
     environment:
@@ -20,7 +16,7 @@ services:
       - bmo_app_reseau
 
   phpmyadmin:
-    image: phpmyadmin/phpmyadmin
+    image: phpmyadmin/phpmyadmin:latest
     container_name: bmo_phpmyadmin
     restart: unless-stopped
     depends_on:

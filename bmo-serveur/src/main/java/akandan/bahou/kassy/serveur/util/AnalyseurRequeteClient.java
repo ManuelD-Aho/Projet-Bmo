@@ -23,8 +23,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Arrays;
 import java.util.stream.Collectors;
-import java.time.format.DateTimeParseException;
-import java.time.LocalDateTime; // Explicitly imported though service might handle string parsing
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,73 +64,88 @@ public class AnalyseurRequeteClient {
         journal.debug("Traitement de la requête de type {} pour le client {}", typeRequete, threadClientConcerne.getSocketClientCommunication().getRemoteSocketAddress());
 
         try {
-            switch (typeRequete) {
-                case CONNEXION:
-                    return traiterConnexion(tokens, threadClientConcerne);
-                case INSCRIPTION:
-                    return traiterInscription(tokens);
-                case DECONNEXION:
-                    return traiterDeconnexion(threadClientConcerne);
-                case NOUVELLE_REUNION:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterNouvelleReunion(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
-                case OBTENIR_REUNIONS: // Listes les réunions actives et planifiées pour tous
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterObtenirReunions();
-                case OBTENIR_MES_REUNIONS: // Listes les réunions de l'utilisateur (organisées/participées)
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterObtenirMesReunions(threadClientConcerne.obtenirIdUtilisateurAuthentifie());
-                case OBTENIR_DETAILS_REUNION:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterObtenirDetailsReunion(tokens);
-                case REJOINDRE_REUNION:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterRejoindreReunion(tokens, threadClientConcerne);
-                case QUITTER_REUNION:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterQuitterReunion(tokens, threadClientConcerne);
-                case MESSAGE_CHAT:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterMessageChat(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
-                case OBTENIR_HISTORIQUE_MESSAGES:
-                    if(!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterObtenirHistoriqueMessages(tokens);
-                case OUVRIR_REUNION:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterOuvrirReunion(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
-                case CLOTURER_REUNION:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterCloreReunion(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
-                case MODIFIER_PROFIL:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterModifierProfil(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
-                case CHANGER_MOT_DE_PASSE:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterChangerMotDePasse(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
-                case OBTENIR_MON_PROFIL:
-                    if (!estAuthentifie(threadClientConcerne)) return reponseAccesRefuse();
-                    return traiterObtenirMonProfil(threadClientConcerne.obtenirIdUtilisateurAuthentifie());
-                case ADMIN_OBTENIR_UTILISATEURS:
-                    if (!estAdmin(threadClientConcerne)) return reponseAccesRefuseAdmin();
-                    return traiterAdminObtenirUtilisateurs();
-                case ADMIN_CREER_UTILISATEUR:
-                    if (!estAdmin(threadClientConcerne)) return reponseAccesRefuseAdmin();
-                    return traiterAdminCreerUtilisateur(tokens);
-                case ADMIN_MODIFIER_UTILISATEUR:
-                    if (!estAdmin(threadClientConcerne)) return reponseAccesRefuseAdmin();
-                    return traiterAdminModifierUtilisateur(tokens);
-                case ADMIN_SUPPRIMER_UTILISATEUR:
-                    if (!estAdmin(threadClientConcerne)) return reponseAccesRefuseAdmin();
-                    return traiterAdminSupprimerUtilisateur(tokens);
-                case ADMIN_OBTENIR_CONFIG:
-                    if (!estAdmin(threadClientConcerne)) return reponseAccesRefuseAdmin();
-                    return traiterAdminObtenirConfig();
-                case ADMIN_DEFINIR_CONFIG:
-                    if (!estAdmin(threadClientConcerne)) return reponseAccesRefuseAdmin();
-                    return traiterAdminDefinirConfig(tokens);
-                default:
-                    return formaterReponseErreur("COMMANDE_NON_GEREE", "La commande '" + typeRequete.name() + "' n'est pas encore gérée.");
-            }
+            return switch (typeRequete) {
+                case CONNEXION -> traiterConnexion(tokens, threadClientConcerne);
+                case INSCRIPTION -> traiterInscription(tokens);
+                case DECONNEXION -> traiterDeconnexion(threadClientConcerne);
+                case NOUVELLE_REUNION -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterNouvelleReunion(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
+                }
+                case OBTENIR_REUNIONS -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterObtenirReunions();
+                }
+                case OBTENIR_MES_REUNIONS -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterObtenirMesReunions(threadClientConcerne.obtenirIdUtilisateurAuthentifie());
+                }
+                case OBTENIR_DETAILS_REUNION -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterObtenirDetailsReunion(tokens);
+                }
+                case REJOINDRE_REUNION -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterRejoindreReunion(tokens, threadClientConcerne);
+                }
+                case QUITTER_REUNION -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterQuitterReunion(tokens, threadClientConcerne);
+                }
+                case MESSAGE_CHAT -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterMessageChat(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
+                }
+                case OBTENIR_HISTORIQUE_MESSAGES -> {
+                    if(!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterObtenirHistoriqueMessages(tokens);
+                }
+                case OUVRIR_REUNION -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterOuvrirReunion(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
+                }
+                case CLOTURER_REUNION -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterCloreReunion(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
+                }
+                case MODIFIER_PROFIL -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterModifierProfil(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
+                }
+                case CHANGER_MOT_DE_PASSE -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterChangerMotDePasse(tokens, threadClientConcerne.obtenirIdUtilisateurAuthentifie());
+                }
+                case OBTENIR_MON_PROFIL -> {
+                    if (!estAuthentifie(threadClientConcerne)) yield reponseAccesRefuse();
+                    yield traiterObtenirMonProfil(threadClientConcerne.obtenirIdUtilisateurAuthentifie());
+                }
+                case ADMIN_OBTENIR_UTILISATEURS -> {
+                    if (!estAdmin(threadClientConcerne)) yield reponseAccesRefuseAdmin();
+                    yield traiterAdminObtenirUtilisateurs();
+                }
+                case ADMIN_CREER_UTILISATEUR -> {
+                    if (!estAdmin(threadClientConcerne)) yield reponseAccesRefuseAdmin();
+                    yield traiterAdminCreerUtilisateur(tokens);
+                }
+                case ADMIN_MODIFIER_UTILISATEUR -> {
+                    if (!estAdmin(threadClientConcerne)) yield reponseAccesRefuseAdmin();
+                    yield traiterAdminModifierUtilisateur(tokens);
+                }
+                case ADMIN_SUPPRIMER_UTILISATEUR -> {
+                    if (!estAdmin(threadClientConcerne)) yield reponseAccesRefuseAdmin();
+                    yield traiterAdminSupprimerUtilisateur(tokens);
+                }
+                case ADMIN_OBTENIR_CONFIG -> {
+                    if (!estAdmin(threadClientConcerne)) yield reponseAccesRefuseAdmin();
+                    yield traiterAdminObtenirConfig();
+                }
+                case ADMIN_DEFINIR_CONFIG -> {
+                    if (!estAdmin(threadClientConcerne)) yield reponseAccesRefuseAdmin();
+                    yield traiterAdminDefinirConfig(tokens);
+                }
+                default -> formaterReponseErreur("COMMANDE_NON_GEREE", "La commande '" + typeRequete.name() + "' n'est pas encore gérée.");
+            };
         } catch (ExceptionValidation ev) {
             journal.warn("Erreur de validation lors du traitement de {} : {}", typeRequete.name(), ev.getMessage());
             return formaterReponseErreur("VALIDATION_ECHOUEE", ev.getMessage());
@@ -174,14 +187,6 @@ public class AnalyseurRequeteClient {
 
     private String traiterDeconnexion(ThreadClientDedie threadClient) {
         journal.info("Client {} (Utilisateur ID: {}) a demandé la déconnexion.", threadClient.getSocketClientCommunication().getRemoteSocketAddress(), threadClient.obtenirIdUtilisateurAuthentifie());
-        Integer idUtilisateur = threadClient.obtenirIdUtilisateurAuthentifie();
-        // Notifier les réunions si l'utilisateur y participait activement
-        // Cette logique pourrait être plus complexe, impliquant ServiceGestionReunions ou ServiceCommunicationReunion
-        // pour notifier correctement les autres participants des réunions quittées.
-        // Pour l'instant, simple réinitialisation.
-        if (idUtilisateur != null) {
-            // Potentiellement iterer sur les réunions actives de l'utilisateur et appeler serviceGestionReunions.quitterReunionAutomatiquement(idReunion, idUtilisateur, threadClient);
-        }
         threadClient.reinitialiserAuthentification();
         threadClient.setClientConnecte(false);
         return TypeReponseServeur.OPERATION_OK.getValeurProtocole() + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + "Déconnexion réussie.";
@@ -222,7 +227,6 @@ public class AnalyseurRequeteClient {
         return TypeReponseServeur.LISTE_MES_REUNIONS.getValeurProtocole() + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + convertirListeDetailsReunionDTOEnChaineProtocole(reunions);
     }
 
-
     private String traiterObtenirDetailsReunion(String[] tokens) throws ExceptionPersistance {
         if (tokens.length < 2) return formaterReponseErreur("PARAM_MANQUANT", "ID de réunion manquant.");
         int idReunion;
@@ -251,7 +255,7 @@ public class AnalyseurRequeteClient {
 
         ReponseGeneriqueDTO reponse = this.serviceGestionReunions.rejoindreReunion(idReunion, threadClient.obtenirIdUtilisateurAuthentifie(), threadClient, motDePasseFourni);
         if (reponse.isSucces()) {
-            DetailsReunionDTO detailsReunion = serviceGestionReunions.obtenirDetailsReunion(idReunion); // Pour obtenir la liste à jour des participants
+            DetailsReunionDTO detailsReunion = serviceGestionReunions.obtenirDetailsReunion(idReunion);
             String participantsChaine = (detailsReunion != null && detailsReunion.getParticipants() != null) ? convertirListeDonneesUtilisateurDTOEnChaineProtocole(detailsReunion.getParticipants()) : "";
             return TypeReponseServeur.REJOINDRE_OK.getValeurProtocole() + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + idReunion + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + participantsChaine;
         } else {
@@ -303,7 +307,6 @@ public class AnalyseurRequeteClient {
         return TypeReponseServeur.HISTORIQUE_MESSAGES.getValeurProtocole() + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + idReunion + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + convertirListeMessageChatDTOEnChaineProtocole(messages);
     }
 
-
     private String traiterOuvrirReunion(String[] tokens, int idOrganisateurDemandeur) {
         if (tokens.length < 2) return formaterReponseErreur("PARAM_MANQUANT", "ID de réunion manquant.");
         int idReunion;
@@ -338,8 +341,7 @@ public class AnalyseurRequeteClient {
 
     private String traiterModifierProfil(String[] tokens, int idUtilisateurDemandeur) {
         if (tokens.length < 2) return formaterReponseErreur("PARAM_MANQUANT", "Paramètres manquants pour MODIFIER_PROFIL.");
-        // MODIFIER_PROFIL|nouveauNomComplet|nouvelIdentifiantConnexion (identifiant peut être vide si non changé)
-        String nouveauNomComplet = tokens[1]; // Doit toujours être présent, même si vide pour signifier "pas de changement" (géré par service)
+        String nouveauNomComplet = tokens[1];
         String nouvelIdentifiantConnexion = (tokens.length > 2) ? tokens[2] : null;
 
         ReponseGeneriqueDTO reponse = serviceGestionUtilisateurs.mettreAJourProfilUtilisateur(idUtilisateurDemandeur, nouveauNomComplet, nouvelIdentifiantConnexion);
@@ -405,7 +407,6 @@ public class AnalyseurRequeteClient {
         } catch (NumberFormatException e) {
             return formaterReponseErreur("PARAM_INVALID", "ID utilisateur invalide.");
         }
-        // ADMIN_MODIFIER_UTILISATEUR|id|login|nom|role|statut (champs optionnels pour modif)
         String login = (tokens.length > 2 && !tokens[2].isEmpty()) ? tokens[2] : null;
         String nom = (tokens.length > 3 && !tokens[3].isEmpty()) ? tokens[3] : null;
         RoleUtilisateur role = null;
@@ -442,7 +443,6 @@ public class AnalyseurRequeteClient {
     }
 
     private String traiterAdminObtenirConfig() {
-        // Ceci est une simplification. Une vraie implémentation nécessiterait une gestion plus fine des configurations.
         java.util.Map<String, String> config = serviceAdministration.obtenirConfigurationServeur();
         String configStr = config.entrySet().stream()
                 .map(entry -> entry.getKey() + "=" + entry.getValue())
@@ -461,7 +461,6 @@ public class AnalyseurRequeteClient {
             return formaterReponseErreur("ADMIN_MODIF_CONFIG_ECHEC", reponse.getMessage());
         }
     }
-
 
     private boolean estAuthentifie(ThreadClientDedie threadClient) {
         return threadClient.obtenirIdUtilisateurAuthentifie() != null;
@@ -486,7 +485,6 @@ public class AnalyseurRequeteClient {
     }
 
     private String construireChaineDetailsReunionDTO(DetailsReunionDTO dto) {
-        // id|titre|idOrga|nomOrga|dateHeureDebut|duree|type|statut|mdpPresent
         return dto.getIdReunion() + ";" +
                 dto.getTitre() + ";" +
                 dto.getIdOrganisateur() + ";" +
@@ -495,15 +493,14 @@ public class AnalyseurRequeteClient {
                 dto.getDureeMinutes() + ";" +
                 dto.getTypeReunion().name() + ";" +
                 dto.getStatutReunion().name() + ";" +
-                dto.isMotDePasseOptionnel();
+                dto.isMotDePasseOptionnelPresent();
     }
 
     private String construireChaineDetailsReunionDTOAvecParticipants(DetailsReunionDTO dto) {
         String base = construireChaineDetailsReunionDTO(dto);
         String participants = (dto.getParticipants() != null) ? convertirListeDonneesUtilisateurDTOEnChaineProtocole(dto.getParticipants()) : "";
-        return base + ConstantesProtocoleBMO.DELIMITEUR_LISTE_ENTREES + participants;
+        return base + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + participants;
     }
-
 
     private String convertirListeDetailsReunionDTOEnChaineProtocole(List<DetailsReunionDTO> reunions) {
         if (reunions == null || reunions.isEmpty()) return "";
@@ -513,7 +510,6 @@ public class AnalyseurRequeteClient {
     }
 
     private String construireChaineDonneesUtilisateurDTO(DonneesUtilisateurDTO dto) {
-        // id|login|nom|role|statut|derniereConnexion
         return dto.getIdUtilisateur() + ";" +
                 dto.getIdentifiantConnexion() + ";" +
                 dto.getNomComplet() + ";" +
@@ -530,9 +526,6 @@ public class AnalyseurRequeteClient {
     }
 
     private String construireChaineMessageChatDTO(MessageChatDTO dto) {
-        // idMessage|idReunion|idEmetteur|nomEmetteur|horodatage|contenu
-        // Note: MessageChatDTO.versChaineDeProtocole() est supposé exister par le prompt de ServiceCommunicationReunion.
-        // Ici, on le réimplemente pour être sûr.
         return dto.getIdMessage() + ";" +
                 dto.getIdReunion() + ";" +
                 dto.getIdUtilisateurEmetteur() + ";" +
@@ -547,5 +540,4 @@ public class AnalyseurRequeteClient {
                 .map(this::construireChaineMessageChatDTO)
                 .collect(Collectors.joining(ConstantesProtocoleBMO.DELIMITEUR_LISTE_ENTREES));
     }
-
 }

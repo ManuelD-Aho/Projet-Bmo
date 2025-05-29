@@ -1,48 +1,35 @@
 package akandan.bahou.kassy.commun.dto;
 
-import java.util.List;
-import akandan.bahou.kassy.commun.modele.TypeReunion;
 import akandan.bahou.kassy.commun.modele.StatutReunion;
+import akandan.bahou.kassy.commun.modele.TypeReunion;
+import java.util.List;
 
 public class DetailsReunionDTO {
 
-    private int id;
+    private int idReunion;
     private String titre;
     private String ordreDuJour;
     private String dateHeureDebut;
     private int dureeMinutes;
     private TypeReunion typeReunion;
     private StatutReunion statutReunion;
-    private int organisateurId;
+    private int idOrganisateur;
     private String nomOrganisateur;
-    private String motDePasseOptionnel;
+    private boolean motDePasseOptionnelPresent;
+    private String motDePasseOptionnelValeur;
+
+
     private List<DonneesUtilisateurDTO> participants;
-    private String dateCreationReunion;
 
     public DetailsReunionDTO() {
     }
 
-    public DetailsReunionDTO(int id, String titre, String ordreDuJour, String dateHeureDebut, int dureeMinutes, TypeReunion typeReunion, StatutReunion statutReunion, int organisateurId, String nomOrganisateur, String motDePasseOptionnel, List<DonneesUtilisateurDTO> participants, String dateCreationReunion) {
-        this.id = id;
-        this.titre = titre;
-        this.ordreDuJour = ordreDuJour;
-        this.dateHeureDebut = dateHeureDebut;
-        this.dureeMinutes = dureeMinutes;
-        this.typeReunion = typeReunion;
-        this.statutReunion = statutReunion;
-        this.organisateurId = organisateurId;
-        this.nomOrganisateur = nomOrganisateur;
-        this.motDePasseOptionnel = motDePasseOptionnel;
-        this.participants = participants;
-        this.dateCreationReunion = dateCreationReunion;
+    public int getIdReunion() {
+        return idReunion;
     }
 
-    public int getId() {
-        return id;
-    }
-
-    public void setId(int id) {
-        this.id = id;
+    public void setIdReunion(int idReunion) {
+        this.idReunion = idReunion;
     }
 
     public String getTitre() {
@@ -93,12 +80,12 @@ public class DetailsReunionDTO {
         this.statutReunion = statutReunion;
     }
 
-    public int getOrganisateurId() {
-        return organisateurId;
+    public int getIdOrganisateur() {
+        return idOrganisateur;
     }
 
-    public void setOrganisateurId(int organisateurId) {
-        this.organisateurId = organisateurId;
+    public void setIdOrganisateur(int idOrganisateur) {
+        this.idOrganisateur = idOrganisateur;
     }
 
     public String getNomOrganisateur() {
@@ -109,13 +96,23 @@ public class DetailsReunionDTO {
         this.nomOrganisateur = nomOrganisateur;
     }
 
-    public String getMotDePasseOptionnel() {
-        return motDePasseOptionnel;
+    public boolean isMotDePasseOptionnelPresent() {
+        return motDePasseOptionnelPresent;
     }
 
-    public void setMotDePasseOptionnel(String motDePasseOptionnel) {
-        this.motDePasseOptionnel = motDePasseOptionnel;
+    public void setMotDePasseOptionnelPresent(boolean motDePasseOptionnelPresent) {
+        this.motDePasseOptionnelPresent = motDePasseOptionnelPresent;
     }
+
+    public String getMotDePasseOptionnelValeur() {
+        return motDePasseOptionnelValeur;
+    }
+
+    public void setMotDePasseOptionnelValeur(String motDePasseOptionnelValeur) {
+        this.motDePasseOptionnelValeur = motDePasseOptionnelValeur;
+        this.motDePasseOptionnelPresent = (motDePasseOptionnelValeur != null && !motDePasseOptionnelValeur.isEmpty());
+    }
+
 
     public List<DonneesUtilisateurDTO> getParticipants() {
         return participants;
@@ -123,13 +120,5 @@ public class DetailsReunionDTO {
 
     public void setParticipants(List<DonneesUtilisateurDTO> participants) {
         this.participants = participants;
-    }
-
-    public String getDateCreationReunion() {
-        return dateCreationReunion;
-    }
-
-    public void setDateCreationReunion(String dateCreationReunion) {
-        this.dateCreationReunion = dateCreationReunion;
     }
 }

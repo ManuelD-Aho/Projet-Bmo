@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.time.LocalDateTime;
 
 import org.slf4j.Logger;
@@ -47,8 +46,6 @@ public class ServiceAdministration {
         if (entite.getDerniereConnexion() != null) {
             dto.setDateDerniereConnexion(entite.getDerniereConnexion().toString());
         }
-        // Les champs photo ne sont pas dans DonneesUtilisateurDTO selon la version précédente.
-        // Si le DTO est mis à jour pour les inclure, ils pourraient être mappés ici.
         return dto;
     }
 
@@ -164,20 +161,12 @@ public class ServiceAdministration {
 
     public Map<String, String> obtenirConfigurationServeur() {
         journal.debug("Tentative d'obtention de la configuration serveur par un administrateur.");
-        // Exemple : retourner un sous-ensemble sûr des propriétés.
-        // La classe ConfigurateurServeur devrait avoir une méthode pour exposer les propriétés de manière sécurisée.
-        // Pour ce prompt, nous supposons que ConfigurateurServeur n'a pas de telle méthode et nous ne pouvons pas le modifier.
-        // Donc, cette méthode ne peut pas être implémentée comme décrit sans modifier ConfigurateurServeur.
-        // Retournons une map vide ou une indication que la fonctionnalité n'est pas pleinement supportée.
         journal.warn("La fonctionnalité obtenirConfigurationServeur n'est pas pleinement implémentée sans modification de ConfigurateurServeur pour exposer les propriétés.");
         return Map.of("bmo.serveur.port", String.valueOf(configurateurServeur.recupererProprieteEntier("bmo.serveur.port", 0)));
     }
 
     public ReponseGeneriqueDTO definirConfigurationServeur(String cleConfiguration, String valeurConfiguration) {
         journal.warn("Tentative de définition de la configuration serveur ('{}'='{}') par un administrateur. Cette fonctionnalité n'est pas supportée pour modification à la volée.", cleConfiguration, valeurConfiguration);
-        // La modification de configuration à la volée est complexe et potentiellement dangereuse.
-        // ConfigurateurServeur charge les propriétés au démarrage et n'est pas conçu pour les modifier à la volée.
-        // Cette méthode retournerait typiquement une erreur ou indiquerait que l'opération n'est pas supportée.
         return new ReponseGeneriqueDTO(false, "La modification de la configuration serveur à la volée n'est pas supportée.", "CONFIG_NON_MODIFIABLE");
     }
 }

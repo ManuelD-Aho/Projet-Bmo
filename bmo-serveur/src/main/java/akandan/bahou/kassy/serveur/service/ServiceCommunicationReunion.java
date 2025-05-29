@@ -8,6 +8,8 @@ import akandan.bahou.kassy.commun.dto.MessageChatDTO;
 import akandan.bahou.kassy.commun.util.ExceptionPersistance;
 import akandan.bahou.kassy.serveur.noyau.ThreadClientDedie;
 import akandan.bahou.kassy.commun.protocole.TypeReponseServeur;
+import akandan.bahou.kassy.commun.modele.StatutParticipationReunion;
+
 
 import java.util.List;
 import java.util.Map;
@@ -69,9 +71,6 @@ public class ServiceCommunicationReunion {
     public List<MessageChatDTO> recupererHistoriqueMessages(int idReunion) throws ExceptionPersistance {
         journal.debug("Récupération de l'historique des messages pour la réunion {}", idReunion);
         List<MessageChatDTO> messages = this.messageChatDAO.recupererMessagesParIdReunion(idReunion);
-        // L'implémentation de MessageChatDAOImpl doit peupler nomUtilisateurEmetteur.
-        // Si ce n'est pas le cas, il faudrait le faire ici en itérant et en appelant utilisateurDAO.
-        // Pour ce prompt, on assume que le DAO le fait.
         for (MessageChatDTO msg : messages) {
             if (msg.getNomUtilisateurEmetteur() == null || msg.getNomUtilisateurEmetteur().isEmpty() || "Utilisateur Inconnu".equals(msg.getNomUtilisateurEmetteur())) {
                 try {
@@ -88,6 +87,15 @@ public class ServiceCommunicationReunion {
     public void enregistrerParticipantConnecte(int idReunion, ThreadClientDedie clientThread) {
         this.participantsConnectesParReunion.computeIfAbsent(idReunion, k -> new CopyOnWriteArrayList<>()).add(clientThread);
         journal.info("Client {} enregistré comme participant actif pour la réunion {}.", clientThread.getSocketClientCommunication().getRemoteSocketAddress(), idReunion);
+
+        try {
+            if (clientThread.obtenirIdUtilisateurAuthentifie() != null) {
+                this.participationReunionDAO.mettreAJourStatutParticipation(idReunion, clientThread.obtenirIdUtilisateurAuthentifie(), StatutParticipationReunion.REJOINT);
+            }
+        } catch (ExceptionPersistance e) {
+            journal.error("Erreur lors de la mise à jour du statut REJOINT pour l'utilisateur {} dans la réunion {}: {}", clientThread.obtenirIdUtilisateurAuthentifie(), idReunion, e.getMessage());
+        }
+
 
         String nomUtilisateur = clientThread.obtenirNomUtilisateurAuthentifie() != null ? clientThread.obtenirNomUtilisateurAuthentifie() : "Un utilisateur";
         Integer idUtilisateur = clientThread.obtenirIdUtilisateurAuthentifie();
@@ -108,6 +116,15 @@ public class ServiceCommunicationReunion {
                     this.participantsConnectesParReunion.remove(idReunion);
                     journal.info("Plus aucun participant actif dans la réunion {}, liste nettoyée.", idReunion);
                 }
+
+                try {
+                    if (clientThread.obtenirIdUtilisateurAuthentifie() != null) {
+                        this.participationReunionDAO.mettreAJourStatutParticipation(idReunion, clientThread.obtenirIdUtilisateurAuthentifie(), StatutParticipationReunion.PARTI);
+                    }
+                } catch (ExceptionPersistance e) {
+                    journal.error("Erreur lors de la mise à jour du statut PARTI pour l'utilisateur {} dans la réunion {}: {}", clientThread.obtenirIdUtilisateurAuthentifie(), idReunion, e.getMessage());
+                }
+
 
                 String nomUtilisateur = clientThread.obtenirNomUtilisateurAuthentifie() != null ? clientThread.obtenirNomUtilisateurAuthentifie() : "Un utilisateur";
                 Integer idUtilisateur = clientThread.obtenirIdUtilisateurAuthentifie();

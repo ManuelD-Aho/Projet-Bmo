@@ -55,8 +55,8 @@ public class ServeurPrincipalBMO {
 
         this.serviceAuthentification = new ServiceAuthentification(this.utilisateurDAO);
         this.serviceGestionUtilisateurs = new ServiceGestionUtilisateurs(this.utilisateurDAO);
-        this.serviceGestionReunions = new ServiceGestionReunions(this.reunionDAO, this.participationReunionDAO, this.utilisateurDAO);
-        this.serviceCommunicationReunion = new ServiceCommunicationReunion(this.messageChatDAO, this.participationReunionDAO);
+        this.serviceCommunicationReunion = new ServiceCommunicationReunion(this.messageChatDAO, this.participationReunionDAO, this.utilisateurDAO);
+        this.serviceGestionReunions = new ServiceGestionReunions(this.reunionDAO, this.participationReunionDAO, this.utilisateurDAO, this.serviceCommunicationReunion);
         this.serviceAdministration = new ServiceAdministration(this.utilisateurDAO, this.configurateurServeur);
 
         this.analyseurDeRequetesClient = new AnalyseurRequeteClient(this.serviceAuthentification, this.serviceGestionUtilisateurs, this.serviceGestionReunions, this.serviceCommunicationReunion, this.serviceAdministration);

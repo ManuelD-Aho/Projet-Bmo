@@ -4,7 +4,6 @@ import akandan.bahou.kassy.serveur.dao.InterfaceUtilisateurDAO;
 import akandan.bahou.kassy.serveur.modele.Utilisateur;
 import akandan.bahou.kassy.commun.dto.DonneesUtilisateurDTO;
 import akandan.bahou.kassy.commun.dto.ReponseGeneriqueDTO;
-import akandan.bahou.kassy.commun.modele.RoleUtilisateur;
 import akandan.bahou.kassy.commun.modele.StatutCompteUtilisateur;
 import akandan.bahou.kassy.commun.util.ExceptionPersistance;
 import akandan.bahou.kassy.commun.util.ExceptionValidation;
@@ -12,10 +11,7 @@ import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur;
 import akandan.bahou.kassy.commun.util.UtilitaireSecuriteMessagerie;
 import akandan.bahou.kassy.commun.util.ExceptionCryptage;
 
-import java.util.List;
-import java.util.ArrayList;
 import java.util.Optional;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 import org.slf4j.Logger;
@@ -43,7 +39,6 @@ public class ServiceGestionUtilisateurs {
         if (entite.getDerniereConnexion() != null) {
             dto.setDateDerniereConnexion(entite.getDerniereConnexion().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         }
-        // Les champs photo ne sont pas dans DonneesUtilisateurDTO
         return dto;
     }
 
@@ -130,27 +125,6 @@ public class ServiceGestionUtilisateurs {
         } catch (ExceptionCryptage | ExceptionPersistance e) {
             journal.error("Erreur technique lors du changement de mot de passe pour ID {} : {}", idUtilisateurDemandeur, e.getMessage(), e);
             return new ReponseGeneriqueDTO(false, "Erreur technique lors du changement de mot de passe.", "CHANGER_MDP_ERREUR_TECH");
-        }
-    }
-
-    public ReponseGeneriqueDTO changerStatutCompteUtilisateur(int idUtilisateurCible, StatutCompteUtilisateur nouveauStatut, int idAdminDemandeur) {
-        journal.debug("Tentative par l'admin ID {} de changer le statut du compte ID {} à {}.", idAdminDemandeur, idUtilisateurCible, nouveauStatut);
-        // La vérification des droits de idAdminDemandeur est supposée faite en amont (par AnalyseurRequeteClient).
-        try {
-            Optional<Utilisateur> utilisateurOpt = this.utilisateurDAO.trouverParId(idUtilisateurCible);
-            if (utilisateurOpt.isEmpty()) {
-                journal.warn("Échec changement statut : Utilisateur cible ID {} non trouvé.", idUtilisateurCible);
-                return new ReponseGeneriqueDTO(false, "Utilisateur cible non trouvé.", "UTIL_CIBLE_NON_TROUVE");
-            }
-            Utilisateur utilisateurCible = utilisateurOpt.get();
-            utilisateurCible.setStatutCompte(nouveauStatut);
-            this.utilisateurDAO.mettreAJour(utilisateurCible);
-            journal.info("Statut du compte de l'utilisateur ID {} changé à {} par l'admin ID {}.", idUtilisateurCible, nouveauStatut.name(), idAdminDemandeur);
-            return new ReponseGeneriqueDTO(true, "Statut du compte utilisateur mis à jour avec succès.");
-
-        } catch (ExceptionPersistance e) {
-            journal.error("Erreur de persistance lors du changement de statut pour l'utilisateur ID {} par admin ID {} : {}", idUtilisateurCible, idAdminDemandeur, e.getMessage(), e);
-            return new ReponseGeneriqueDTO(false, "Erreur serveur lors de la mise à jour du statut du compte.", "CHANGER_STATUT_ERREUR_PERSIST");
         }
     }
 }
