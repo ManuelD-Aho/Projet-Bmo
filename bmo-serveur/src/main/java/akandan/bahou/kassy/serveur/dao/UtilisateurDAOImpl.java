@@ -1,21 +1,20 @@
 package akandan.bahou.kassy.serveur.dao;
 
+import akandan.bahou.kassy.commun.modele.RoleUtilisateur;
+import akandan.bahou.kassy.commun.modele.StatutCompteUtilisateur;
+import akandan.bahou.kassy.commun.util.ExceptionPersistance;
+import akandan.bahou.kassy.serveur.modele.Utilisateur;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
-import akandan.bahou.kassy.serveur.modele.Utilisateur;
-import akandan.bahou.kassy.commun.modele.RoleUtilisateur;
-import akandan.bahou.kassy.commun.modele.StatutCompteUtilisateur; // Not in schema, cannot be used for DB
-import akandan.bahou.kassy.commun.util.ExceptionPersistance;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,13 +23,30 @@ public class UtilisateurDAOImpl implements InterfaceUtilisateurDAO {
     private final GestionnaireConnexionBaseDeDonnees gestionnaireDeConnexions;
     private static final Logger journal = LoggerFactory.getLogger(UtilisateurDAOImpl.class);
 
-    private static final String REQUETE_CREER_UTILISATEUR = "INSERT INTO users (login, password, name, role, photo, photo_mimetype) VALUES (?, ?, ?, ?, ?, ?)"; // date_created is DEFAULT
-    private static final String REQUETE_TROUVER_PAR_ID = "SELECT id, login, password, name, role, photo, photo_mimetype, date_created FROM users WHERE id = ?";
-    private static final String REQUETE_TROUVER_PAR_IDENTIFIANT_CONNEXION = "SELECT id, login, password, name, role, photo, photo_mimetype, date_created FROM users WHERE login = ?";
-    private static final String REQUETE_TROUVER_TOUS = "SELECT id, login, password, name, role, photo, photo_mimetype, date_created FROM users ORDER BY name ASC";
-    private static final String REQUETE_METTRE_A_JOUR_UTILISATEUR = "UPDATE users SET login=?, password=?, name=?, role=?, photo=?, photo_mimetype=? WHERE id = ?";
-    private static final String REQUETE_SUPPRIMER_UTILISATEUR = "DELETE FROM users WHERE id = ?";
-    private static final String REQUETE_EXISTE_PAR_IDENTIFIANT_CONNEXION = "SELECT COUNT(*) AS nombre FROM users WHERE login = ?";
+    private static final String TABLE_UTILISATEURS = "utilisateurs";
+    private static final String COL_ID = "id";
+    private static final String COL_IDENTIFIANT = "identifiant_connexion";
+    private static final String COL_MOT_DE_PASSE_HACHE = "mot_de_passe_hache";
+    private static final String COL_SEL_MOT_DE_PASSE = "sel_mot_de_passe";
+    private static final String COL_NOM_COMPLET = "nom_complet";
+    private static final String COL_ROLE_SYSTEME = "role_systeme";
+    private static final String COL_STATUT_COMPTE = "statut_compte";
+    private static final String COL_DATE_CREATION = "date_creation_compte";
+    private static final String COL_DERNIERE_CONNEXION = "derniere_connexion";
+
+    private static final String REQUETE_CREER_UTILISATEUR = "INSERT INTO " + TABLE_UTILISATEURS +
+            " (" + COL_IDENTIFIANT + ", " + COL_MOT_DE_PASSE_HACHE + ", " + COL_SEL_MOT_DE_PASSE + ", " +
+            COL_NOM_COMPLET + ", " + COL_ROLE_SYSTEME + ", " + COL_STATUT_COMPTE + ", " + COL_DATE_CREATION + ", " + COL_DERNIERE_CONNEXION +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    private static final String REQUETE_TROUVER_PAR_ID = "SELECT * FROM " + TABLE_UTILISATEURS + " WHERE " + COL_ID + " = ?";
+    private static final String REQUETE_TROUVER_PAR_IDENTIFIANT_CONNEXION = "SELECT * FROM " + TABLE_UTILISATEURS + " WHERE " + COL_IDENTIFIANT + " = ?";
+    private static final String REQUETE_TROUVER_TOUS = "SELECT * FROM " + TABLE_UTILISATEURS + " ORDER BY " + COL_NOM_COMPLET + " ASC";
+    private static final String REQUETE_METTRE_A_JOUR_UTILISATEUR = "UPDATE " + TABLE_UTILISATEURS + " SET " +
+            COL_IDENTIFIANT + "=?, " + COL_MOT_DE_PASSE_HACHE + "=?, " + COL_SEL_MOT_DE_PASSE + "=?, " +
+            COL_NOM_COMPLET + "=?, " + COL_ROLE_SYSTEME + "=?, " + COL_STATUT_COMPTE + "=?, " + COL_DERNIERE_CONNEXION + "=? " +
+            "WHERE " + COL_ID + " = ?";
+    private static final String REQUETE_SUPPRIMER_UTILISATEUR = "DELETE FROM " + TABLE_UTILISATEURS + " WHERE " + COL_ID + " = ?";
+    private static final String REQUETE_EXISTE_PAR_IDENTIFIANT_CONNEXION = "SELECT COUNT(*) AS nombre FROM " + TABLE_UTILISATEURS + " WHERE " + COL_IDENTIFIANT + " = ?";
 
     public UtilisateurDAOImpl(GestionnaireConnexionBaseDeDonnees gestionnaireDeConnexions) {
         this.gestionnaireDeConnexions = gestionnaireDeConnexions;
@@ -38,32 +54,21 @@ public class UtilisateurDAOImpl implements InterfaceUtilisateurDAO {
 
     private Utilisateur hydraterUtilisateurDepuisResultSet(ResultSet rs) throws SQLException {
         Utilisateur utilisateur = new Utilisateur();
-        utilisateur.setId(rs.getInt("id"));
-        utilisateur.setIdentifiantConnexion(rs.getString("login"));
-        utilisateur.setMotDePasseHache(rs.getString("password"));
-        // selMotDePasse n'est pas dans le schéma 'users'
-        utilisateur.setNomComplet(rs.getString("name"));
-
-        String roleDb = rs.getString("role");
-        if (roleDb != null) {
-            if ("ADMIN".equalsIgnoreCase(roleDb)) {
-                utilisateur.setRoleSysteme(RoleUtilisateur.ADMINISTRATEUR);
-            } else if ("USER".equalsIgnoreCase(roleDb)) {
-                // Par défaut, un 'USER' de la DB est un 'PARTICIPANT'.
-                // La distinction 'ORGANISATEUR' est une logique applicative au-dessus.
-                utilisateur.setRoleSysteme(RoleUtilisateur.PARTICIPANT);
-            } else {
-                journal.warn("Rôle système inconnu depuis DB: '{}'", roleDb);
-            }
-        }
-        // statutCompte n'est pas dans le schéma 'users'
-        Timestamp dateCreationSql = rs.getTimestamp("date_created");
+        utilisateur.setId(rs.getLong(COL_ID));
+        utilisateur.setIdentifiant(rs.getString(COL_IDENTIFIANT));
+        utilisateur.setMotDePasseHache(rs.getString(COL_MOT_DE_PASSE_HACHE));
+        utilisateur.setSelMotDePasse(rs.getString(COL_SEL_MOT_DE_PASSE));
+        utilisateur.setNomComplet(rs.getString(COL_NOM_COMPLET));
+        utilisateur.setRole(RoleUtilisateur.valueOf(rs.getString(COL_ROLE_SYSTEME)));
+        utilisateur.setStatutCompte(StatutCompteUtilisateur.valueOf(rs.getString(COL_STATUT_COMPTE)));
+        Timestamp dateCreationSql = rs.getTimestamp(COL_DATE_CREATION);
         if (dateCreationSql != null) {
             utilisateur.setDateCreationCompte(dateCreationSql.toLocalDateTime());
         }
-        // derniereConnexion n'est pas dans le schéma 'users'
-        utilisateur.setPhoto(rs.getBytes("photo"));
-        utilisateur.setPhotoMimeType(rs.getString("photo_mimetype"));
+        Timestamp dateDerniereConnexionSql = rs.getTimestamp(COL_DERNIERE_CONNEXION);
+        if (dateDerniereConnexionSql != null) {
+            utilisateur.setDerniereConnexion(dateDerniereConnexionSql.toLocalDateTime());
+        }
         return utilisateur;
     }
 
@@ -72,25 +77,24 @@ public class UtilisateurDAOImpl implements InterfaceUtilisateurDAO {
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_CREER_UTILISATEUR, Statement.RETURN_GENERATED_KEYS)) {
 
-            declarationPreparee.setString(1, utilisateurACreer.getIdentifiantConnexion());
+            declarationPreparee.setString(1, utilisateurACreer.getIdentifiant());
             declarationPreparee.setString(2, utilisateurACreer.getMotDePasseHache());
-            declarationPreparee.setString(3, utilisateurACreer.getNomComplet());
-            if (utilisateurACreer.getRoleSysteme() == RoleUtilisateur.ADMINISTRATEUR) {
-                declarationPreparee.setString(4, "ADMIN");
-            } else { // PARTICIPANT et ORGANISATEUR mappent à 'USER' dans la DB
-                declarationPreparee.setString(4, "USER");
+            declarationPreparee.setString(3, utilisateurACreer.getSelMotDePasse());
+            declarationPreparee.setString(4, utilisateurACreer.getNomComplet());
+            declarationPreparee.setString(5, utilisateurACreer.getRole().name());
+            declarationPreparee.setString(6, utilisateurACreer.getStatutCompte().name());
+            declarationPreparee.setTimestamp(7, Timestamp.valueOf(utilisateurACreer.getDateCreationCompte()));
+            if (utilisateurACreer.getDerniereConnexion() != null) {
+                declarationPreparee.setTimestamp(8, Timestamp.valueOf(utilisateurACreer.getDerniereConnexion()));
+            } else {
+                declarationPreparee.setNull(8, Types.TIMESTAMP);
             }
-            declarationPreparee.setBytes(5, utilisateurACreer.getPhoto());
-            declarationPreparee.setString(6, utilisateurACreer.getPhotoMimeType());
-            // date_created est géré par DB DEFAULT CURRENT_TIMESTAMP
 
             int lignesAffectees = declarationPreparee.executeUpdate();
             if (lignesAffectees > 0) {
                 try (ResultSet clesGenerees = declarationPreparee.getGeneratedKeys()) {
                     if (clesGenerees.next()) {
-                        utilisateurACreer.setId(clesGenerees.getInt(1));
-                        // Récupérer date_created si nécessaire, bien que la DB le gère
-                        // Optionnel: Re-fetch l'utilisateur pour avoir la date_created par la DB
+                        utilisateurACreer.setId(clesGenerees.getLong(1));
                     }
                 }
             }
@@ -98,17 +102,17 @@ public class UtilisateurDAOImpl implements InterfaceUtilisateurDAO {
             return utilisateurACreer;
 
         } catch (SQLException e) {
-            journal.error("Erreur SQL lors de la création de l'utilisateur : {}", utilisateurACreer.getIdentifiantConnexion(), e);
+            journal.error("Erreur SQL lors de la création de l'utilisateur : {}", utilisateurACreer.getIdentifiant(), e);
             throw new ExceptionPersistance("Erreur lors de la création de l'utilisateur.", e);
         }
     }
 
     @Override
-    public Optional<Utilisateur> trouverParId(int idUtilisateur) throws ExceptionPersistance {
+    public Optional<Utilisateur> trouverParId(long idUtilisateur) throws ExceptionPersistance {
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_TROUVER_PAR_ID)) {
 
-            declarationPreparee.setInt(1, idUtilisateur);
+            declarationPreparee.setLong(1, idUtilisateur);
             try (ResultSet resultSet = declarationPreparee.executeQuery()) {
                 if (resultSet.next()) {
                     Utilisateur utilisateur = hydraterUtilisateurDepuisResultSet(resultSet);
@@ -171,18 +175,18 @@ public class UtilisateurDAOImpl implements InterfaceUtilisateurDAO {
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_METTRE_A_JOUR_UTILISATEUR)) {
 
-            declarationPreparee.setString(1, utilisateurAMettreAJour.getIdentifiantConnexion());
+            declarationPreparee.setString(1, utilisateurAMettreAJour.getIdentifiant());
             declarationPreparee.setString(2, utilisateurAMettreAJour.getMotDePasseHache());
-            declarationPreparee.setString(3, utilisateurAMettreAJour.getNomComplet());
-            if (utilisateurAMettreAJour.getRoleSysteme() == RoleUtilisateur.ADMINISTRATEUR) {
-                declarationPreparee.setString(4, "ADMIN");
+            declarationPreparee.setString(3, utilisateurAMettreAJour.getSelMotDePasse());
+            declarationPreparee.setString(4, utilisateurAMettreAJour.getNomComplet());
+            declarationPreparee.setString(5, utilisateurAMettreAJour.getRole().name());
+            declarationPreparee.setString(6, utilisateurAMettreAJour.getStatutCompte().name());
+            if (utilisateurAMettreAJour.getDerniereConnexion() != null) {
+                declarationPreparee.setTimestamp(7, Timestamp.valueOf(utilisateurAMettreAJour.getDerniereConnexion()));
             } else {
-                declarationPreparee.setString(4, "USER");
+                declarationPreparee.setNull(7, Types.TIMESTAMP);
             }
-            declarationPreparee.setBytes(5, utilisateurAMettreAJour.getPhoto());
-            declarationPreparee.setString(6, utilisateurAMettreAJour.getPhotoMimeType());
-            declarationPreparee.setInt(7, utilisateurAMettreAJour.getId());
-            // derniere_connexion et statut_compte ne sont pas dans le schéma et ne peuvent pas être mis à jour ici
+            declarationPreparee.setLong(8, utilisateurAMettreAJour.getId());
 
             int lignesAffectees = declarationPreparee.executeUpdate();
             journal.debug("Mise à jour de l'utilisateur ID : {}, lignes affectées : {}", utilisateurAMettreAJour.getId(), lignesAffectees);
@@ -195,11 +199,11 @@ public class UtilisateurDAOImpl implements InterfaceUtilisateurDAO {
     }
 
     @Override
-    public boolean supprimer(int idUtilisateur) throws ExceptionPersistance {
+    public boolean supprimer(long idUtilisateur) throws ExceptionPersistance {
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_SUPPRIMER_UTILISATEUR)) {
 
-            declarationPreparee.setInt(1, idUtilisateur);
+            declarationPreparee.setLong(1, idUtilisateur);
             int lignesAffectees = declarationPreparee.executeUpdate();
             journal.debug("Suppression de l'utilisateur ID : {}, lignes affectées : {}", idUtilisateur, lignesAffectees);
             return lignesAffectees > 0;

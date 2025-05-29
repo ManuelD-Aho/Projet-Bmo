@@ -1,14 +1,14 @@
 package akandan.bahou.kassy.serveur.noyau;
 
-import java.net.Socket;
+import akandan.bahou.kassy.commun.protocole.TypeReponseServeur;
+import akandan.bahou.kassy.commun.util.ConstantesProtocoleBMO;
+import akandan.bahou.kassy.serveur.util.AnalyseurRequeteClient;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.io.IOException;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import akandan.bahou.kassy.serveur.util.AnalyseurRequeteClient;
-import akandan.bahou.kassy.commun.util.ConstantesProtocoleBMO;
-import akandan.bahou.kassy.commun.protocole.TypeReponseServeur;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +20,7 @@ public class ThreadClientDedie implements Runnable {
     private BufferedReader fluxEntreeDepuisClient;
     private static final Logger journal = LoggerFactory.getLogger(ThreadClientDedie.class);
     private volatile boolean clientConnecte = true;
-    private Integer idUtilisateurAuthentifie = null;
+    private Long idUtilisateurAuthentifie = null; // Corrigé en Long
     private String nomUtilisateurAuthentifie = null;
 
     public ThreadClientDedie(Socket socketClient, AnalyseurRequeteClient analyseur) {
@@ -37,7 +37,7 @@ public class ThreadClientDedie implements Runnable {
             journal.info("Flux de communication établis pour le client : {}", this.socketClientCommunication.getRemoteSocketAddress());
 
             String ligneRequeteClient;
-            while (this.clientConnecte && (ligneRequeteClient = this.fluxEntreeDepuisClient.readLine()) != null) {
+            while (this.clientConnecte && this.socketClientCommunication.isConnected() && !this.socketClientCommunication.isClosed() && (ligneRequeteClient = this.fluxEntreeDepuisClient.readLine()) != null) {
                 journal.debug("Reçu du client {}: {}", this.socketClientCommunication.getRemoteSocketAddress(), ligneRequeteClient);
                 String reponseServeur = this.analyseurDeRequetes.traiterRequete(ligneRequeteClient, this);
                 if (reponseServeur != null && !reponseServeur.isEmpty()) {
@@ -47,9 +47,15 @@ public class ThreadClientDedie implements Runnable {
         } catch (java.io.EOFException eofe) {
             journal.info("Le client {} a fermé la connexion (EOFException).", this.socketClientCommunication.getRemoteSocketAddress());
         } catch (java.net.SocketException se) {
-            journal.warn("SocketException pour le client {} (connexion probablement réinitialisée ou fermée) : {}", this.socketClientCommunication.getRemoteSocketAddress(), se.getMessage());
+            if (this.clientConnecte) { // N'afficher l'erreur que si la déconnexion n'était pas attendue
+                journal.warn("SocketException pour le client {} (connexion probablement réinitialisée ou fermée) : {}", this.socketClientCommunication.getRemoteSocketAddress(), se.getMessage());
+            } else {
+                journal.info("Socket fermé comme prévu pour le client {}.", this.socketClientCommunication.getRemoteSocketAddress());
+            }
         } catch (IOException ioe) {
-            journal.error("Erreur d'E/S lors de la communication avec le client {} : {}", this.socketClientCommunication.getRemoteSocketAddress(), ioe.getMessage(), ioe);
+            if (this.clientConnecte) {
+                journal.error("Erreur d'E/S lors de la communication avec le client {} : {}", this.socketClientCommunication.getRemoteSocketAddress(), ioe.getMessage(), ioe);
+            }
         } catch (Exception e) {
             journal.error("Erreur inattendue lors du traitement du client {} : {}", this.socketClientCommunication.getRemoteSocketAddress(), e.getMessage(), e);
             envoyerReponseAuClient(TypeReponseServeur.ERREUR.getValeurProtocole() + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + "ERREUR_INTERNE" + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + "Une erreur interne est survenue.");
@@ -64,37 +70,42 @@ public class ThreadClientDedie implements Runnable {
             journal.debug("Envoyé au client {}: {}", this.socketClientCommunication.getRemoteSocketAddress(), messageReponse);
         } else {
             journal.warn("Impossible d'envoyer la réponse au client {}, le flux de sortie n'est pas disponible ou en erreur.", this.socketClientCommunication.getRemoteSocketAddress());
+            this.clientConnecte = false; // Marquer comme déconnecté si on ne peut plus écrire
         }
     }
 
     private void deconnecterClientProprement() {
+        if (!this.clientConnecte && this.fluxEntreeDepuisClient == null && this.fluxSortieVersClient == null && (this.socketClientCommunication == null || this.socketClientCommunication.isClosed())) {
+            // Déjà nettoyé
+            return;
+        }
         this.clientConnecte = false;
-        journal.info("Déconnexion du client : {}", this.socketClientCommunication.getRemoteSocketAddress());
+        journal.info("Déconnexion propre du client : {}", this.socketClientCommunication != null ? this.socketClientCommunication.getRemoteSocketAddress() : "Socket Inconnu");
         try {
             if (this.fluxEntreeDepuisClient != null) this.fluxEntreeDepuisClient.close();
         } catch (IOException e) {
-            journal.warn("Erreur lors de la fermeture du flux d'entrée pour {}.", this.socketClientCommunication.getRemoteSocketAddress(), e);
+            journal.warn("Erreur lors de la fermeture du flux d'entrée pour {}.", this.socketClientCommunication != null ? this.socketClientCommunication.getRemoteSocketAddress() : "Socket Inconnu", e);
         }
+        if (this.fluxSortieVersClient != null) this.fluxSortieVersClient.close();
         try {
-            if (this.fluxSortieVersClient != null) this.fluxSortieVersClient.close();
-        } catch (Exception e) {
-            journal.warn("Erreur lors de la fermeture du flux de sortie pour {}.", this.socketClientCommunication.getRemoteSocketAddress(), e);
-        }
-        try {
-            if (!this.socketClientCommunication.isClosed()) this.socketClientCommunication.close();
+            if (this.socketClientCommunication != null && !this.socketClientCommunication.isClosed()) this.socketClientCommunication.close();
         } catch (IOException e) {
-            journal.warn("Erreur lors de la fermeture du socket client pour {}.", this.socketClientCommunication.getRemoteSocketAddress(), e);
+            journal.warn("Erreur lors de la fermeture du socket client pour {}.", this.socketClientCommunication != null ? this.socketClientCommunication.getRemoteSocketAddress() : "Socket Inconnu", e);
         }
-        journal.info("Client {} déconnecté et ressources libérées.", this.socketClientCommunication.getRemoteSocketAddress());
+        this.fluxEntreeDepuisClient = null;
+        this.fluxSortieVersClient = null;
+        // this.socketClientCommunication = null; // Ne pas mettre à null car final
+
+        journal.info("Client {} déconnecté et ressources libérées.", this.socketClientCommunication != null ? this.socketClientCommunication.getRemoteSocketAddress() : "Socket Inconnu");
     }
 
-    public void definirUtilisateurAuthentifie(int idUtilisateur, String nomUtilisateur) {
+    public void definirUtilisateurAuthentifie(long idUtilisateur, String nomUtilisateur) { // Corrigé en long
         this.idUtilisateurAuthentifie = idUtilisateur;
         this.nomUtilisateurAuthentifie = nomUtilisateur;
         journal.info("Client {} authentifié comme utilisateur ID: {}, Nom: {}.", this.socketClientCommunication.getRemoteSocketAddress(), idUtilisateur, nomUtilisateur);
     }
 
-    public Integer obtenirIdUtilisateurAuthentifie() {
+    public Long obtenirIdUtilisateurAuthentifie() { // Corrigé en Long
         return this.idUtilisateurAuthentifie;
     }
 
@@ -114,5 +125,8 @@ public class ThreadClientDedie implements Runnable {
 
     public void setClientConnecte(boolean clientConnecte) {
         this.clientConnecte = clientConnecte;
+        if(!clientConnecte){
+            deconnecterClientProprement();
+        }
     }
 }

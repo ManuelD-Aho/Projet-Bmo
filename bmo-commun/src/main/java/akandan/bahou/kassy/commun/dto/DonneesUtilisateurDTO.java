@@ -111,6 +111,8 @@ public class DonneesUtilisateurDTO implements Serializable {
 
     public static DonneesUtilisateurDTO fromJson(String jsonString) throws JSONException {
         if (jsonString == null || jsonString.trim().isEmpty()) {
+            // Consider logging a warning or throwing an IllegalArgumentException
+            // For now, returning null as per one interpretation of "gérer"
             return null;
         }
         JSONObject jsonObject = new JSONObject(jsonString);
@@ -125,13 +127,14 @@ public class DonneesUtilisateurDTO implements Serializable {
                 dto.setRole(RoleUtilisateur.valueOf(jsonObject.getString("role")));
             } catch (IllegalArgumentException e) {
                 // Log l'erreur ou assigne une valeur par défaut si nécessaire
+                // e.g., EnregistreurEvenementsBMO.getLogger(DonneesUtilisateurDTO.class).warn("Rôle invalide dans JSON : {}", jsonObject.getString("role"));
             }
         }
         if (jsonObject.has("statutCompte") && !jsonObject.isNull("statutCompte")) {
             try {
                 dto.setStatutCompte(StatutCompteUtilisateur.valueOf(jsonObject.getString("statutCompte")));
             } catch (IllegalArgumentException e) {
-                // Log l'erreur ou assigne une valeur par défaut
+                // Log l'erreur
             }
         }
         if (jsonObject.has("dateCreationCompte") && !jsonObject.isNull("dateCreationCompte")) {
@@ -153,14 +156,19 @@ public class DonneesUtilisateurDTO implements Serializable {
 
     @Override
     public String toString() {
-        return "DonneesUtilisateurDTO{" +
-                "idUtilisateur=" + idUtilisateur +
-                ", identifiant='" + identifiant + '\'' +
-                ", nomComplet='" + nomComplet + '\'' +
-                ", role=" + role +
-                ", statutCompte=" + statutCompte +
-                ", dateCreationCompte=" + dateCreationCompte +
-                ", dateDerniereConnexion=" + dateDerniereConnexion +
-                '}';
+        try {
+            return toJsonString();
+        } catch (JSONException e) {
+            return "DonneesUtilisateurDTO{" +
+                    "idUtilisateur=" + idUtilisateur +
+                    ", identifiant='" + identifiant + '\'' +
+                    ", nomComplet='" + nomComplet + '\'' +
+                    ", role=" + role +
+                    ", statutCompte=" + statutCompte +
+                    ", dateCreationCompte=" + dateCreationCompte +
+                    ", dateDerniereConnexion=" + dateDerniereConnexion +
+                    ", (Erreur JSON: " + e.getMessage() + ")" +
+                    '}';
+        }
     }
 }

@@ -1,51 +1,50 @@
 package akandan.bahou.kassy.serveur.modele;
 
-import java.time.LocalDateTime;
 import akandan.bahou.kassy.commun.modele.RoleUtilisateur;
 import akandan.bahou.kassy.commun.modele.StatutCompteUtilisateur;
+import java.time.LocalDateTime;
 
 public class Utilisateur {
 
-    private int id;
-    private String identifiantConnexion;
+    private long id; // Corrigé en long
+    private String identifiant; // Corrigé depuis identifiantConnexion
     private String motDePasseHache;
     private String selMotDePasse;
     private String nomComplet;
-    private RoleUtilisateur roleSysteme;
+    private RoleUtilisateur role; // Corrigé depuis roleSysteme
     private StatutCompteUtilisateur statutCompte;
     private LocalDateTime dateCreationCompte;
     private LocalDateTime derniereConnexion;
-    private byte[] photo;
-    private String photoMimeType;
-
+    private byte[] photo; // Conservé si utilisé, sinon peut être omis
+    private String photoMimeType; // Conservé si utilisé
 
     public Utilisateur() {
     }
 
-    public Utilisateur(String identifiantConnexion, String motDePasseHache, String selMotDePasse, String nomComplet, RoleUtilisateur roleSysteme, StatutCompteUtilisateur statutCompte, LocalDateTime dateCreationCompte) {
-        this.identifiantConnexion = identifiantConnexion;
+    public Utilisateur(String identifiant, String motDePasseHache, String selMotDePasse, String nomComplet, RoleUtilisateur role, StatutCompteUtilisateur statutCompte, LocalDateTime dateCreationCompte) {
+        this.identifiant = identifiant;
         this.motDePasseHache = motDePasseHache;
         this.selMotDePasse = selMotDePasse;
         this.nomComplet = nomComplet;
-        this.roleSysteme = roleSysteme;
+        this.role = role;
         this.statutCompte = statutCompte;
         this.dateCreationCompte = dateCreationCompte;
     }
 
-    public int getId() {
+    public long getId() {
         return id;
     }
 
-    public void setId(int id) {
+    public void setId(long id) {
         this.id = id;
     }
 
-    public String getIdentifiantConnexion() {
-        return identifiantConnexion;
+    public String getIdentifiant() {
+        return identifiant;
     }
 
-    public void setIdentifiantConnexion(String identifiantConnexion) {
-        this.identifiantConnexion = identifiantConnexion;
+    public void setIdentifiant(String identifiant) {
+        this.identifiant = identifiant;
     }
 
     public String getMotDePasseHache() {
@@ -72,12 +71,12 @@ public class Utilisateur {
         this.nomComplet = nomComplet;
     }
 
-    public RoleUtilisateur getRoleSysteme() {
-        return roleSysteme;
+    public RoleUtilisateur getRole() {
+        return role;
     }
 
-    public void setRoleSysteme(RoleUtilisateur roleSysteme) {
-        this.roleSysteme = roleSysteme;
+    public void setRole(RoleUtilisateur role) {
+        this.role = role;
     }
 
     public StatutCompteUtilisateur getStatutCompte() {
@@ -86,6 +85,10 @@ public class Utilisateur {
 
     public void setStatutCompte(StatutCompteUtilisateur statutCompte) {
         this.statutCompte = statutCompte;
+    }
+
+    public LocalDateTime getDateCreationCompte() {
+        return dateCreationCompte;
     }
 
     public void setDateCreationCompte(LocalDateTime dateCreationCompte) {

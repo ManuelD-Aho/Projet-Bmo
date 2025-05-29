@@ -1,12 +1,15 @@
 package akandan.bahou.kassy.client.controleur;
 
 import javafx.application.Platform;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -14,23 +17,19 @@ import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
-import javafx.beans.property.SimpleStringProperty;
 import javafx.util.Callback;
 import javafx.util.StringConverter;
-
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ResourceBundle;
 import java.util.Optional;
-import java.util.Arrays;
-
+import java.util.ResourceBundle;
 import akandan.bahou.kassy.client.coeur.GestionnaireNavigation;
+import akandan.bahou.kassy.client.modele.ModeleObservableUtilisateur;
 import akandan.bahou.kassy.client.service.ServiceCommunicationServeur;
 import akandan.bahou.kassy.client.service.ServiceSessionUtilisateur;
-import akandan.bahou.kassy.client.modele.ModeleObservableUtilisateur;
 import akandan.bahou.kassy.client.util.AlertesUtilisateur;
 import akandan.bahou.kassy.commun.dto.DonneesUtilisateurDTO;
 import akandan.bahou.kassy.commun.modele.RoleUtilisateur;
@@ -43,28 +42,27 @@ public class ControleurAdministrationUtilisateurs implements ControleurAvecIniti
     @FXML private TableView<ModeleObservableUtilisateur> tableVueUtilisateurs;
     @FXML private TableColumn<ModeleObservableUtilisateur, String> colonneIdUtilisateur;
     @FXML private TableColumn<ModeleObservableUtilisateur, String> colonneNomComplet;
-    @FXML private TableColumn<ModeleObservableUtilisateur, String> colonneIdentifiantConnexion;
+    @FXML private TableColumn<ModeleObservableUtilisateur, String> colonneIdentifiant;
     @FXML private TableColumn<ModeleObservableUtilisateur, String> colonneRole;
     @FXML private TableColumn<ModeleObservableUtilisateur, String> colonneStatutCompte;
     @FXML private TableColumn<ModeleObservableUtilisateur, String> colonneDateCreation;
     @FXML private TableColumn<ModeleObservableUtilisateur, String> colonneDerniereConnexion;
     @FXML private TableColumn<ModeleObservableUtilisateur, Void> colonneActionsUtilisateur;
-    @FXML private Button boutonRetourTableauDeBord;
-    @FXML private TextField champRechercheUtilisateur;
-    @FXML private Button boutonRechercher;
-    @FXML private Button boutonCreerUtilisateur;
+    @FXML private Button boutonRetourTableauDeBordAdmin;
+    @FXML private TextField champRechercheUtilisateurAdmin;
+    @FXML private Button boutonCreerUtilisateurAdmin;
 
     private GestionnaireNavigation gestionnaireNavigation;
     private ServiceCommunicationServeur serviceCommunicationServeur;
     private ServiceSessionUtilisateur serviceSessionUtilisateur;
     private ResourceBundle paquetRessourcesI18n;
-    private final ObservableList<ModeleObservableUtilisateur> listeObservableUtilisateurs = FXCollections.observableArrayList();
-    private FilteredList<ModeleObservableUtilisateur> listeFiltreeUtilisateurs;
+    private final ObservableList<ModeleObservableUtilisateur> listeObservableUtilisateursAdmin = FXCollections.observableArrayList();
+    private FilteredList<ModeleObservableUtilisateur> listeFiltreeUtilisateursAdmin;
     private static final Logger journal = EnregistreurEvenementsBMO.getLogger(ControleurAdministrationUtilisateurs.class);
-    private final DateTimeFormatter formateurDateHeure = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+    private final DateTimeFormatter formateurDateHeureAffichage = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     public ControleurAdministrationUtilisateurs() {
-        this.listeFiltreeUtilisateurs = new FilteredList<>(listeObservableUtilisateurs, p -> true);
+        this.listeFiltreeUtilisateursAdmin = new FilteredList<>(listeObservableUtilisateursAdmin, p -> true);
     }
 
     @Override
@@ -74,108 +72,93 @@ public class ControleurAdministrationUtilisateurs implements ControleurAvecIniti
         this.serviceSessionUtilisateur = serviceSess;
         this.paquetRessourcesI18n = paquetRessources;
 
-        if (!serviceSessionUtilisateur.aRole(RoleUtilisateur.ADMINISTRATEUR)) {
+        if (serviceSessionUtilisateur.getUtilisateurConnecte() == null || serviceSessionUtilisateur.getUtilisateurConnecte().getRole() != RoleUtilisateur.ADMINISTRATEUR) {
             AlertesUtilisateur.afficherErreur(paquetRessourcesI18n.getString("error.access.denied.title"), paquetRessourcesI18n.getString("error.admin.access.required"));
             Platform.runLater(gestionnaireNavigation::afficherTableauDeBord);
             return;
         }
 
-        serviceComm.listeUtilisateursMiseAJourProperty().addListener((obs, ancienneListe, nouvelleListe) -> {
-            Platform.runLater(() -> {
-                listeObservableUtilisateurs.clear();
-                if (nouvelleListe != null) {
-                    nouvelleListe.forEach(dto -> listeObservableUtilisateurs.add(new ModeleObservableUtilisateur(dto)));
-                }
-                tableVueUtilisateurs.refresh();
-            });
-        });
-
-        // Écouteur pour les mises à jour d'un utilisateur unique (après modification par exemple)
-        serviceComm.profilUtilisateurMisAJourProperty().addListener((obs, ancienProfil, nouveauProfil) -> {
-            if (nouveauProfil != null) {
+        serviceCommunicationServeur.listeGlobaleUtilisateursProperty().addListener((obs, ancienneListe, nouvelleListe) ->
                 Platform.runLater(() -> {
-                    Optional<ModeleObservableUtilisateur> utilisateurExistant = listeObservableUtilisateurs.stream()
-                            .filter(u -> u.getIdUtilisateur().equals(String.valueOf(nouveauProfil.getIdUtilisateur())))
-                            .findFirst();
-                    if (utilisateurExistant.isPresent()) {
-                        utilisateurExistant.get().mettreAJourAvecDTO(nouveauProfil);
-                    } else {
-                        // Si l'utilisateur n'était pas dans la liste (cas peu probable après une modif, mais possible)
-                        listeObservableUtilisateurs.add(new ModeleObservableUtilisateur(nouveauProfil));
+                    listeObservableUtilisateursAdmin.clear();
+                    if (nouvelleListe != null) {
+                        nouvelleListe.forEach(dto -> listeObservableUtilisateursAdmin.add(new ModeleObservableUtilisateur(dto)));
                     }
-                    tableVueUtilisateurs.refresh();
-                });
+                })
+        );
+
+        serviceCommunicationServeur.utilisateurMisAJourParAdminProperty().addListener((obs, ancienUtil, nouveauUtil) -> {
+            if (nouveauUtil != null) { // Un utilisateur a été mis à jour
+                // Rafraîchir toute la liste pour la simplicité, ou mettre à jour l'élément spécifique
+                serviceCommunicationServeur.envoyerRequeteAdminObtenirUtilisateurs(champRechercheUtilisateurAdmin.getText());
             }
         });
-
 
         serviceCommunicationServeur.envoyerRequeteAdminObtenirUtilisateurs("");
     }
 
     @FXML
     private void initialize() {
+        // listeFiltreeUtilisateursAdmin est déjà initialisée
+
         colonneIdUtilisateur.setCellValueFactory(cellData -> cellData.getValue().idUtilisateurProperty());
         colonneNomComplet.setCellValueFactory(cellData -> cellData.getValue().nomCompletProperty());
-        colonneIdentifiantConnexion.setCellValueFactory(cellData -> cellData.getValue().identifiantProperty());
-
+        colonneIdentifiant.setCellValueFactory(cellData -> cellData.getValue().identifiantProperty());
         colonneRole.setCellValueFactory(cellData -> {
-            try {
-                return new SimpleStringProperty(paquetRessourcesI18n.getString("role." + cellData.getValue().getRole().name().toLowerCase()));
-            } catch (Exception e) {
-                return new SimpleStringProperty(cellData.getValue().getRole().name());
-            }
+            RoleUtilisateur role = cellData.getValue().getRole();
+            return new SimpleStringProperty(role != null ? paquetRessourcesI18n.getString("role." + role.name().toLowerCase()) : "");
         });
         colonneStatutCompte.setCellValueFactory(cellData -> {
-            try {
-                return new SimpleStringProperty(paquetRessourcesI18n.getString("statut.compte." + cellData.getValue().getStatutCompte().name().toLowerCase()));
-            } catch (Exception e) {
-                return new SimpleStringProperty(cellData.getValue().getStatutCompte().name());
-            }
+            StatutCompteUtilisateur statut = cellData.getValue().getStatutCompte();
+            return new SimpleStringProperty(statut != null ? paquetRessourcesI18n.getString("user.status." + statut.name().toLowerCase()) : "");
         });
-
-        colonneDateCreation.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getDateCreationCompte() != null ? cellData.getValue().getDateCreationCompte().format(formateurDateHeure) : ""));
-        colonneDerniereConnexion.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getDateDerniereConnexion() != null ? cellData.getValue().getDateDerniereConnexion().format(formateurDateHeure) : ""));
+        colonneDateCreation.setCellValueFactory(cellData -> {
+            // ModeleObservableUtilisateur stocke déjà la date formatée
+            return cellData.getValue().dateCreationCompteAffichageProperty();
+        });
+        colonneDerniereConnexion.setCellValueFactory(cellData -> {
+            return cellData.getValue().dateDerniereConnexionAffichageProperty();
+        });
 
         configurerColonneActionsAdmin();
-        tableVueUtilisateurs.setItems(listeFiltreeUtilisateurs);
+        tableVueUtilisateurs.setItems(listeFiltreeUtilisateursAdmin);
+        tableVueUtilisateurs.setPlaceholder(new Label(paquetRessourcesI18n.getString("admin.users.table.noUsers")));
 
-        champRechercheUtilisateur.textProperty().addListener((observable, oldValue, newValue) -> {
-            listeFiltreeUtilisateurs.setPredicate(utilisateur -> {
-                if (newValue == null || newValue.isEmpty()) {
-                    return true;
-                }
-                String lowerCaseFilter = newValue.toLowerCase();
-                if (utilisateur.getNomComplet().toLowerCase().contains(lowerCaseFilter)) {
-                    return true;
-                } else if (utilisateur.getIdentifiant().toLowerCase().contains(lowerCaseFilter)) {
-                    return true;
-                }
-                return false;
+
+        champRechercheUtilisateurAdmin.textProperty().addListener((observable, oldValue, newValue) -> {
+            String filtre = newValue == null ? "" : newValue.toLowerCase().trim();
+            listeFiltreeUtilisateursAdmin.setPredicate(utilisateur -> {
+                if (filtre.isEmpty()) return true;
+                return utilisateur.getNomComplet().toLowerCase().contains(filtre) ||
+                        utilisateur.getIdentifiant().toLowerCase().contains(filtre);
             });
         });
-        boutonCreerUtilisateur.setDisable(true); // Fonctionnalité non implémentée pour l'instant
-        boutonCreerUtilisateur.setVisible(false);
+
+        if (paquetRessourcesI18n != null) {
+            boutonRetourTableauDeBordAdmin.setText(paquetRessourcesI18n.getString("common.button.back"));
+            boutonCreerUtilisateurAdmin.setText(paquetRessourcesI18n.getString("admin.users.button.createUser"));
+            champRechercheUtilisateurAdmin.setPromptText(paquetRessourcesI18n.getString("admin.users.textfield.searchUser"));
+        }
+        boutonCreerUtilisateurAdmin.setDisable(true); // Fonctionnalité non prioritaire
+        boutonCreerUtilisateurAdmin.setManaged(false);
+        boutonCreerUtilisateurAdmin.setVisible(false);
     }
 
     private void configurerColonneActionsAdmin() {
         Callback<TableColumn<ModeleObservableUtilisateur, Void>, TableCell<ModeleObservableUtilisateur, Void>> cellFactory = param -> {
             final TableCell<ModeleObservableUtilisateur, Void> cell = new TableCell<>() {
-                private final Button boutonModifier = new Button(paquetRessourcesI18n.getString("button.edit"));
-                private final Button boutonChangerStatut = new Button(); // Texte dynamique
-                private final HBox conteneurActions = new HBox(5, boutonModifier, boutonChangerStatut);
+                private final Button btnModifierRole = new Button(paquetRessourcesI18n.getString("admin.users.action.editRole"));
+                private final Button btnChangerStatut = new Button(); // Texte dynamique
+                private final HBox conteneurActions = new HBox(5, btnModifierRole, btnChangerStatut);
 
                 {
-                    boutonModifier.setOnAction(event -> {
+                    btnModifierRole.setOnAction(event -> {
                         ModeleObservableUtilisateur utilisateur = getTableView().getItems().get(getIndex());
-                        if (utilisateur != null) {
-                            ouvrirDialogueModificationUtilisateur(utilisateur);
-                        }
+                        ouvrirDialogueModificationRole(utilisateur);
                     });
-                    boutonChangerStatut.setOnAction(event -> {
+                    btnChangerStatut.setOnAction(event -> {
                         ModeleObservableUtilisateur utilisateur = getTableView().getItems().get(getIndex());
-                        if (utilisateur != null) {
-                            changerStatutCompteUtilisateurInteractivement(utilisateur);
-                        }
+                        changerStatutCompteUtilisateur(utilisateur);
                     });
                 }
 
@@ -186,16 +169,17 @@ public class ControleurAdministrationUtilisateurs implements ControleurAvecIniti
                         setGraphic(null);
                     } else {
                         ModeleObservableUtilisateur utilisateur = getTableView().getItems().get(getIndex());
-                        DonneesUtilisateurDTO adminActuel = serviceSessionUtilisateur.getUtilisateurConnecte();
+                        DonneesUtilisateurDTO adminConnecte = serviceSessionUtilisateur.getUtilisateurConnecte();
 
-                        boolean estSoiMeme = adminActuel != null && String.valueOf(adminActuel.getIdUtilisateur()).equals(utilisateur.getIdUtilisateur());
-                        boutonModifier.setDisable(estSoiMeme);
-                        boutonChangerStatut.setDisable(estSoiMeme);
+                        boolean estSoiMeme = adminConnecte != null && utilisateur.getIdUtilisateur().equals(String.valueOf(adminConnecte.getIdUtilisateur()));
+
+                        btnModifierRole.setDisable(estSoiMeme);
+                        btnChangerStatut.setDisable(estSoiMeme);
 
                         if (utilisateur.getStatutCompte() == StatutCompteUtilisateur.ACTIF) {
-                            boutonChangerStatut.setText(paquetRessourcesI18n.getString("button.deactivate"));
+                            btnChangerStatut.setText(paquetRessourcesI18n.getString("admin.users.action.deactivate"));
                         } else {
-                            boutonChangerStatut.setText(paquetRessourcesI18n.getString("button.activate"));
+                            btnChangerStatut.setText(paquetRessourcesI18n.getString("admin.users.action.activate"));
                         }
                         setGraphic(conteneurActions);
                     }
@@ -207,46 +191,31 @@ public class ControleurAdministrationUtilisateurs implements ControleurAvecIniti
     }
 
     @FXML
-    private void actionRetourTableauDeBord(ActionEvent evenement) {
+    private void actionRetourTableauDeBordAdmin(ActionEvent evenement) {
         gestionnaireNavigation.afficherTableauDeBord();
     }
 
-    @FXML
-    private void actionRechercherUtilisateurs(ActionEvent evenement) {
-        String termeRecherche = champRechercheUtilisateur.getText();
-        // Le filtrage est déjà dynamique grâce au listener.
-        // Si une recherche serveur est voulue, elle serait déclenchée ici.
-        journal.debug("Action de recherche cliquée, filtre actuel : {}", termeRecherche);
-        serviceCommunicationServeur.envoyerRequeteAdminObtenirUtilisateurs(termeRecherche);
-    }
+    private void ouvrirDialogueModificationRole(ModeleObservableUtilisateur utilisateur) {
+        Dialog<RoleUtilisateur> dialogue = new Dialog<>();
+        dialogue.setTitle(paquetRessourcesI18n.getString("admin.users.dialog.editRole.title"));
+        dialogue.setHeaderText(paquetRessourcesI18n.getString("admin.users.dialog.editRole.header") + " " + utilisateur.getNomComplet());
 
-    @FXML
-    private void actionCreerNouvelUtilisateur(ActionEvent evenement) {
-        journal.info("Fonctionnalité de création d'utilisateur par admin non implémentée.");
-        AlertesUtilisateur.afficherInformation("Fonctionnalité en développement", "La création d'utilisateurs depuis ce panneau n'est pas encore disponible.");
-    }
-
-    private void ouvrirDialogueModificationUtilisateur(ModeleObservableUtilisateur utilisateur) {
-        Dialog<DonneesUtilisateurDTO> dialogue = new Dialog<>();
-        dialogue.setTitle(paquetRessourcesI18n.getString("admin.edit.user.dialog.title"));
-        dialogue.setHeaderText(paquetRessourcesI18n.getString("admin.edit.user.dialog.header") + " " + utilisateur.getNomComplet());
-
-        ButtonType boutonSauvegarderType = new ButtonType(paquetRessourcesI18n.getString("button.save"), ButtonData.OK_DONE);
+        ButtonType boutonSauvegarderType = new ButtonType(paquetRessourcesI18n.getString("common.button.save"), ButtonData.OK_DONE);
         dialogue.getDialogPane().getButtonTypes().addAll(boutonSauvegarderType, ButtonType.CANCEL);
 
         GridPane grille = new GridPane();
         grille.setHgap(10);
         grille.setVgap(10);
+        grille.setPadding(new Insets(20, 150, 10, 10));
 
-        ComboBox<RoleUtilisateur> comboBoxRole = new ComboBox<>();
-        comboBoxRole.getItems().setAll(RoleUtilisateur.values());
+        ComboBox<RoleUtilisateur> comboBoxRole = new ComboBox<>(FXCollections.observableArrayList(RoleUtilisateur.values()));
         comboBoxRole.setValue(utilisateur.getRole());
         comboBoxRole.setConverter(new StringConverter<>() {
             @Override public String toString(RoleUtilisateur role) { return role == null ? "" : paquetRessourcesI18n.getString("role." + role.name().toLowerCase()); }
             @Override public RoleUtilisateur fromString(String string) { return null; }
         });
 
-        grille.add(new Label(paquetRessourcesI18n.getString("label.role") + ":"), 0, 0);
+        grille.add(new Label(paquetRessourcesI18n.getString("admin.users.label.role") + ":"), 0, 0);
         grille.add(comboBoxRole, 1, 0);
 
         dialogue.getDialogPane().setContent(grille);
@@ -254,45 +223,43 @@ public class ControleurAdministrationUtilisateurs implements ControleurAvecIniti
 
         dialogue.setResultConverter(typeBouton -> {
             if (typeBouton == boutonSauvegarderType) {
-                DonneesUtilisateurDTO dtoModifie = new DonneesUtilisateurDTO();
-                // On ne modifie que le rôle ici, le statut est géré par un autre bouton/dialogue.
-                // L'ID est crucial pour que le serveur sache quel utilisateur modifier.
-                dtoModifie.setIdUtilisateur(Long.parseLong(utilisateur.getIdUtilisateur()));
-                dtoModifie.setRole(comboBoxRole.getValue());
-                dtoModifie.setStatutCompte(utilisateur.getStatutCompte()); // Conserver le statut actuel
-                return dtoModifie;
+                return comboBoxRole.getValue();
             }
             return null;
         });
 
-        Optional<DonneesUtilisateurDTO> resultat = dialogue.showAndWait();
-        resultat.ifPresent(dto -> {
-            if (dto.getRole() != utilisateur.getRole()) { // Vérifier s'il y a eu un changement
+        Optional<RoleUtilisateur> resultat = dialogue.showAndWait();
+        resultat.ifPresent(nouveauRole -> {
+            if (nouveauRole != utilisateur.getRole()) {
+                DonneesUtilisateurDTO dto = new DonneesUtilisateurDTO();
+                dto.setIdUtilisateur(Long.parseLong(utilisateur.getIdUtilisateur()));
+                dto.setRole(nouveauRole);
+                dto.setStatutCompte(utilisateur.getStatutCompte()); // Conserver le statut actuel
+                // Les autres champs ne sont pas nécessaires pour cette requête spécifique côté serveur
                 serviceCommunicationServeur.envoyerRequeteAdminModifierUtilisateur(dto);
-                journal.info("Demande de modification du rôle pour l'utilisateur ID {} à {}", dto.getIdUtilisateur(), dto.getRole());
-            } else {
-                journal.info("Aucun changement de rôle détecté pour l'utilisateur ID {}.", dto.getIdUtilisateur());
             }
         });
     }
 
-    private void changerStatutCompteUtilisateurInteractivement(ModeleObservableUtilisateur utilisateur) {
+    private void changerStatutCompteUtilisateur(ModeleObservableUtilisateur utilisateur) {
         StatutCompteUtilisateur statutActuel = utilisateur.getStatutCompte();
-        StatutCompteUtilisateur nouveauStatutPropose = (statutActuel == StatutCompteUtilisateur.ACTIF) ? StatutCompteUtilisateur.INACTIF : StatutCompteUtilisateur.ACTIF;
+        StatutCompteUtilisateur nouveauStatut = (statutActuel == StatutCompteUtilisateur.ACTIF) ? StatutCompteUtilisateur.INACTIF : StatutCompteUtilisateur.ACTIF;
 
-        String messageConfirmation = String.format(
-                paquetRessourcesI18n.getString("admin.confirm.status.change." + nouveauStatutPropose.name().toLowerCase()),
-                utilisateur.getNomComplet()
-        );
+        String cleConfirmation = nouveauStatut == StatutCompteUtilisateur.ACTIF ? "admin.users.confirm.activate" : "admin.users.confirm.deactivate";
+        String messageConfirmation = String.format(paquetRessourcesI18n.getString(cleConfirmation), utilisateur.getNomComplet());
 
-        if (AlertesUtilisateur.afficherConfirmation(paquetRessourcesI18n.getString("admin.confirm.status.change.title"), messageConfirmation)) {
-            DonneesUtilisateurDTO dtoPourModification = new DonneesUtilisateurDTO();
-            dtoPourModification.setIdUtilisateur(Long.parseLong(utilisateur.getIdUtilisateur()));
-            dtoPourModification.setRole(utilisateur.getRole()); // Conserver le rôle actuel
-            dtoPourModification.setStatutCompte(nouveauStatutPropose);
-
-            serviceCommunicationServeur.envoyerRequeteAdminModifierUtilisateur(dtoPourModification);
-            journal.info("Demande de changement de statut pour l'utilisateur ID {} à {}", utilisateur.getIdUtilisateur(), nouveauStatutPropose);
+        if (AlertesUtilisateur.afficherConfirmation(paquetRessourcesI18n.getString("admin.users.confirm.statusChange.title"), messageConfirmation)) {
+            DonneesUtilisateurDTO dto = new DonneesUtilisateurDTO();
+            dto.setIdUtilisateur(Long.parseLong(utilisateur.getIdUtilisateur()));
+            dto.setRole(utilisateur.getRole()); // Conserver le rôle actuel
+            dto.setStatutCompte(nouveauStatut);
+            serviceCommunicationServeur.envoyerRequeteAdminModifierUtilisateur(dto);
         }
+    }
+
+    @FXML
+    private void actionCreerNouvelUtilisateurAdmin(ActionEvent evenement) {
+        // Non implémenté, bouton désactivé
+        AlertesUtilisateur.afficherInformation("Fonctionnalité non disponible", "La création d'utilisateurs depuis ce panneau n'est pas encore implémentée.");
     }
 }

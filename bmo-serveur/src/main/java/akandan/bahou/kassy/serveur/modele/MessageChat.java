@@ -5,8 +5,8 @@ import java.time.LocalDateTime;
 public class MessageChat {
 
     private long idMessage;
-    private int idReunion;
-    private int idUtilisateurEmetteur;
+    private long idReunion; // Corrigé en long pour cohérence potentielle
+    private long idUtilisateurEmetteur; // Corrigé en long
     private String contenuMessage;
     private LocalDateTime horodatage;
 
@@ -21,19 +21,19 @@ public class MessageChat {
         this.idMessage = idMessage;
     }
 
-    public int getIdReunion() {
+    public long getIdReunion() {
         return idReunion;
     }
 
-    public void setIdReunion(int idReunion) {
+    public void setIdReunion(long idReunion) {
         this.idReunion = idReunion;
     }
 
-    public int getIdUtilisateurEmetteur() {
+    public long getIdUtilisateurEmetteur() {
         return idUtilisateurEmetteur;
     }
 
-    public void setIdUtilisateurEmetteur(int idUtilisateurEmetteur) {
+    public void setIdUtilisateurEmetteur(long idUtilisateurEmetteur) {
         this.idUtilisateurEmetteur = idUtilisateurEmetteur;
     }
 

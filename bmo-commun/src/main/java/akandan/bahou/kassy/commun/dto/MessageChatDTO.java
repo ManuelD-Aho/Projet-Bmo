@@ -120,13 +120,18 @@ public class MessageChatDTO implements Serializable {
 
     @Override
     public String toString() {
-        return "MessageChatDTO{" +
-                "idMessage=" + idMessage +
-                ", idReunion=" + idReunion +
-                ", idExpediteur=" + idExpediteur +
-                ", nomExpediteur='" + nomExpediteur + '\'' +
-                ", contenu='" + contenu + '\'' +
-                ", horodatage=" + horodatage +
-                '}';
+        try {
+            return toJsonString();
+        } catch (JSONException e) {
+            return "MessageChatDTO{" +
+                    "idMessage=" + idMessage +
+                    ", idReunion=" + idReunion +
+                    ", idExpediteur=" + idExpediteur +
+                    ", nomExpediteur='" + nomExpediteur + '\'' +
+                    ", contenu='" + contenu + '\'' +
+                    ", horodatage=" + horodatage +
+                    ", (Erreur JSON: " + e.getMessage() + ")" +
+                    '}';
+        }
     }
 }

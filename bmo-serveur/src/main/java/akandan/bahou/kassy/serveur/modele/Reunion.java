@@ -1,30 +1,44 @@
 package akandan.bahou.kassy.serveur.modele;
 
-import java.time.LocalDateTime;
-import akandan.bahou.kassy.commun.modele.TypeReunion;
 import akandan.bahou.kassy.commun.modele.StatutReunion;
+import akandan.bahou.kassy.commun.modele.TypeReunion;
+import java.time.LocalDateTime;
 
 public class Reunion {
 
-    private int id;
+    private long id; // Corrigé en long
     private String titre;
-    private String ordreDuJour;
+    private String description; // Cohérence avec DetailsReunionDTO
     private LocalDateTime dateHeureDebut;
-    private int dureeMinutes;
+    private int dureeEstimeeMinutes; // Cohérence avec DetailsReunionDTO
     private TypeReunion typeReunion;
     private StatutReunion statutReunion;
-    private int organisateurId;
-    private String motDePasseOptionnel;
+    private long organisateurId; // Corrigé en long
+    private String motDePasseOptionnel; // Le DTO a motDePasseOptionnelValeur
     private LocalDateTime dateCreationReunion;
 
     public Reunion() {
     }
 
-    public int getId() {
+    // Constructeur complet peut être utile pour les tests ou la création initiale par le service
+    public Reunion(String titre, String description, LocalDateTime dateHeureDebut, int dureeEstimeeMinutes, TypeReunion typeReunion, StatutReunion statutReunion, long organisateurId, String motDePasseOptionnel, LocalDateTime dateCreationReunion) {
+        this.titre = titre;
+        this.description = description;
+        this.dateHeureDebut = dateHeureDebut;
+        this.dureeEstimeeMinutes = dureeEstimeeMinutes;
+        this.typeReunion = typeReunion;
+        this.statutReunion = statutReunion;
+        this.organisateurId = organisateurId;
+        this.motDePasseOptionnel = motDePasseOptionnel;
+        this.dateCreationReunion = dateCreationReunion;
+    }
+
+
+    public long getId() {
         return id;
     }
 
-    public void setId(int id) {
+    public void setId(long id) {
         this.id = id;
     }
 
@@ -36,12 +50,12 @@ public class Reunion {
         this.titre = titre;
     }
 
-    public String getOrdreDuJour() {
-        return ordreDuJour;
+    public String getDescription() {
+        return description;
     }
 
-    public void setOrdreDuJour(String ordreDuJour) {
-        this.ordreDuJour = ordreDuJour;
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public LocalDateTime getDateHeureDebut() {
@@ -52,12 +66,12 @@ public class Reunion {
         this.dateHeureDebut = dateHeureDebut;
     }
 
-    public int getDureeMinutes() {
-        return dureeMinutes;
+    public int getDureeEstimeeMinutes() {
+        return dureeEstimeeMinutes;
     }
 
-    public void setDureeMinutes(int dureeMinutes) {
-        this.dureeMinutes = dureeMinutes;
+    public void setDureeEstimeeMinutes(int dureeEstimeeMinutes) {
+        this.dureeEstimeeMinutes = dureeEstimeeMinutes;
     }
 
     public TypeReunion getTypeReunion() {
@@ -76,11 +90,11 @@ public class Reunion {
         this.statutReunion = statutReunion;
     }
 
-    public int getOrganisateurId() {
+    public long getOrganisateurId() {
         return organisateurId;
     }
 
-    public void setOrganisateurId(int organisateurId) {
+    public void setOrganisateurId(long organisateurId) {
         this.organisateurId = organisateurId;
     }
 
@@ -90,6 +104,10 @@ public class Reunion {
 
     public void setMotDePasseOptionnel(String motDePasseOptionnel) {
         this.motDePasseOptionnel = motDePasseOptionnel;
+    }
+
+    public LocalDateTime getDateCreationReunion() {
+        return dateCreationReunion;
     }
 
     public void setDateCreationReunion(LocalDateTime dateCreationReunion) {

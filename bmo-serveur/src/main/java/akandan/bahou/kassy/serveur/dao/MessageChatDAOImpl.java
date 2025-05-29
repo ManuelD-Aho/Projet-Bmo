@@ -1,18 +1,17 @@
 package akandan.bahou.kassy.serveur.dao;
 
+import akandan.bahou.kassy.commun.dto.MessageChatDTO;
+import akandan.bahou.kassy.commun.util.ExceptionPersistance;
+import akandan.bahou.kassy.serveur.modele.MessageChat;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-
-import akandan.bahou.kassy.commun.dto.MessageChatDTO;
-import akandan.bahou.kassy.serveur.modele.MessageChat;
-import akandan.bahou.kassy.commun.util.ExceptionPersistance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,11 +20,11 @@ public class MessageChatDAOImpl implements InterfaceMessageChatDAO {
     private final GestionnaireConnexionBaseDeDonnees gestionnaireDeConnexions;
     private static final Logger journal = LoggerFactory.getLogger(MessageChatDAOImpl.class);
 
-    private static final String REQUETE_SAUVEGARDER_MESSAGE = "INSERT INTO messages (meeting_id, user_id, content, timestamp) VALUES (?, ?, ?, ?)";
-    private static final String REQUETE_RECUPERER_PAR_ID_REUNION = "SELECT id, meeting_id, user_id, content, timestamp FROM messages WHERE meeting_id = ? ORDER BY timestamp ASC";
-    private static final String REQUETE_RECUPERER_PAR_ID_MESSAGE = "SELECT id, meeting_id, user_id, content, timestamp FROM messages WHERE id = ?";
-    private static final String REQUETE_SUPPRIMER_MESSAGE = "DELETE FROM messages WHERE id = ?";
-    private static final String REQUETE_METTRE_A_JOUR_MESSAGE = "UPDATE messages SET content = ? WHERE id = ?";
+    private static final String REQUETE_SAUVEGARDER_MESSAGE = "INSERT INTO messages_chat (reunion_id, utilisateur_id, contenu_message, horodatage) VALUES (?, ?, ?, ?)";
+    private static final String REQUETE_RECUPERER_PAR_ID_REUNION = "SELECT id, reunion_id, utilisateur_id, contenu_message, horodatage FROM messages_chat WHERE reunion_id = ? ORDER BY horodatage ASC";
+    private static final String REQUETE_RECUPERER_PAR_ID_MESSAGE = "SELECT id, reunion_id, utilisateur_id, contenu_message, horodatage FROM messages_chat WHERE id = ?";
+    private static final String REQUETE_SUPPRIMER_MESSAGE = "DELETE FROM messages_chat WHERE id = ?";
+    private static final String REQUETE_METTRE_A_JOUR_MESSAGE = "UPDATE messages_chat SET contenu_message = ? WHERE id = ?";
 
     public MessageChatDAOImpl(GestionnaireConnexionBaseDeDonnees gestionnaireDeConnexions) {
         this.gestionnaireDeConnexions = gestionnaireDeConnexions;
@@ -34,10 +33,10 @@ public class MessageChatDAOImpl implements InterfaceMessageChatDAO {
     private MessageChat hydraterMessageDepuisResultSet(ResultSet resultSet) throws SQLException {
         MessageChat entite = new MessageChat();
         entite.setIdMessage(resultSet.getLong("id"));
-        entite.setIdReunion(resultSet.getInt("meeting_id"));
-        entite.setIdUtilisateurEmetteur(resultSet.getInt("user_id"));
-        entite.setContenuMessage(resultSet.getString("content"));
-        Timestamp horodatageSql = resultSet.getTimestamp("timestamp");
+        entite.setIdReunion(resultSet.getLong("reunion_id"));
+        entite.setIdUtilisateurEmetteur(resultSet.getLong("utilisateur_id"));
+        entite.setContenuMessage(resultSet.getString("contenu_message"));
+        Timestamp horodatageSql = resultSet.getTimestamp("horodatage");
         if (horodatageSql != null) {
             entite.setHorodatage(horodatageSql.toLocalDateTime());
         }
@@ -51,13 +50,10 @@ public class MessageChatDAOImpl implements InterfaceMessageChatDAO {
         MessageChatDTO dto = new MessageChatDTO();
         dto.setIdMessage(entite.getIdMessage());
         dto.setIdReunion(entite.getIdReunion());
-        dto.setIdUtilisateurEmetteur(entite.getIdUtilisateurEmetteur());
-        dto.setContenuMessage(entite.getContenuMessage());
-        if (entite.getHorodatage() != null) {
-            dto.setHorodatage(entite.getHorodatage().toString());
-        }
-        // nomUtilisateurEmetteur n'est pas dans l'entité MessageChat,
-        // il sera peuplé par la couche service si nécessaire.
+        dto.setIdExpediteur(entite.getIdUtilisateurEmetteur()); // Corrigé: DTO utilise idExpediteur
+        // Le nom de l'expéditeur sera ajouté par la couche service si nécessaire.
+        dto.setContenu(entite.getContenuMessage()); // Corrigé: DTO utilise contenu
+        dto.setHorodatage(entite.getHorodatage());
         return dto;
     }
 
@@ -68,32 +64,24 @@ public class MessageChatDAOImpl implements InterfaceMessageChatDAO {
         MessageChat entite = new MessageChat();
         entite.setIdMessage(dto.getIdMessage());
         entite.setIdReunion(dto.getIdReunion());
-        entite.setIdUtilisateurEmetteur(dto.getIdUtilisateurEmetteur());
-        entite.setContenuMessage(dto.getContenuMessage());
-        if (dto.getHorodatage() != null && !dto.getHorodatage().isEmpty()) {
-            try {
-                entite.setHorodatage(LocalDateTime.parse(dto.getHorodatage()));
-            } catch (java.time.format.DateTimeParseException e) {
-                journal.warn("Format d'horodatage invalide pour le DTO lors de la conversion : {}", dto.getHorodatage(), e);
-                // Gérer l'erreur ou laisser l'horodatage de l'entité à null
-            }
-        }
+        entite.setIdUtilisateurEmetteur(dto.getIdExpediteur()); // Corrigé: DTO utilise idExpediteur
+        entite.setContenuMessage(dto.getContenu()); // Corrigé: DTO utilise contenu
+        entite.setHorodatage(dto.getHorodatage());
         return entite;
     }
-
 
     @Override
     public void sauvegarderMessage(MessageChatDTO messageDTO) throws ExceptionPersistance {
         MessageChat entite = convertirDTOVersEntite(messageDTO);
-        if (entite.getHorodatage() == null) { // S'assurer que l'horodatage est défini
+        if (entite.getHorodatage() == null) {
             entite.setHorodatage(LocalDateTime.now());
         }
 
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_SAUVEGARDER_MESSAGE, Statement.RETURN_GENERATED_KEYS)) {
 
-            declarationPreparee.setInt(1, entite.getIdReunion());
-            declarationPreparee.setInt(2, entite.getIdUtilisateurEmetteur());
+            declarationPreparee.setLong(1, entite.getIdReunion());
+            declarationPreparee.setLong(2, entite.getIdUtilisateurEmetteur());
             declarationPreparee.setString(3, entite.getContenuMessage());
             declarationPreparee.setTimestamp(4, Timestamp.valueOf(entite.getHorodatage()));
 
@@ -101,7 +89,7 @@ public class MessageChatDAOImpl implements InterfaceMessageChatDAO {
             if (lignesAffectees > 0) {
                 try (ResultSet clesGenerees = declarationPreparee.getGeneratedKeys()) {
                     if (clesGenerees.next()) {
-                        messageDTO.setIdMessage(clesGenerees.getLong(1)); // Mettre à jour l'ID dans le DTO original
+                        messageDTO.setIdMessage(clesGenerees.getLong(1));
                     }
                 }
             }
@@ -119,7 +107,7 @@ public class MessageChatDAOImpl implements InterfaceMessageChatDAO {
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_RECUPERER_PAR_ID_REUNION)) {
 
-            declarationPreparee.setInt(1, idReunion);
+            declarationPreparee.setInt(1, idReunion); // La colonne BD est reunion_id (INT)
             try (ResultSet resultSet = declarationPreparee.executeQuery()) {
                 while (resultSet.next()) {
                     MessageChat entite = hydraterMessageDepuisResultSet(resultSet);

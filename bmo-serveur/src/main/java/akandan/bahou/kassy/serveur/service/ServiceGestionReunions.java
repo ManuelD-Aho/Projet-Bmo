@@ -1,30 +1,27 @@
 package akandan.bahou.kassy.serveur.service;
 
-import akandan.bahou.kassy.serveur.dao.InterfaceReunionDAO;
-import akandan.bahou.kassy.serveur.dao.InterfaceParticipationReunionDAO;
-import akandan.bahou.kassy.serveur.dao.InterfaceUtilisateurDAO;
-import akandan.bahou.kassy.serveur.modele.Reunion;
-import akandan.bahou.kassy.serveur.modele.Utilisateur;
 import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
 import akandan.bahou.kassy.commun.dto.DonneesUtilisateurDTO;
 import akandan.bahou.kassy.commun.dto.ReponseGeneriqueDTO;
-import akandan.bahou.kassy.commun.modele.TypeReunion;
-import akandan.bahou.kassy.commun.modele.StatutReunion;
 import akandan.bahou.kassy.commun.modele.RoleDansReunion;
 import akandan.bahou.kassy.commun.modele.StatutParticipationReunion;
+import akandan.bahou.kassy.commun.modele.StatutReunion;
+import akandan.bahou.kassy.commun.modele.TypeReunion;
 import akandan.bahou.kassy.commun.util.ExceptionPersistance;
 import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur;
+import akandan.bahou.kassy.serveur.dao.InterfaceParticipationReunionDAO;
+import akandan.bahou.kassy.serveur.dao.InterfaceReunionDAO;
+import akandan.bahou.kassy.serveur.dao.InterfaceUtilisateurDAO;
+import akandan.bahou.kassy.serveur.modele.Reunion;
+import akandan.bahou.kassy.serveur.modele.Utilisateur;
 import akandan.bahou.kassy.serveur.noyau.ThreadClientDedie;
-import akandan.bahou.kassy.commun.protocole.TypeReponseServeur;
-
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,72 +40,79 @@ public class ServiceGestionReunions {
         this.serviceCommunication = serviceCommunication;
     }
 
-    private DetailsReunionDTO convertirEntiteReunionVersDTO(Reunion entite) {
+    private DetailsReunionDTO convertirEntiteReunionVersDTO(Reunion entite, List<DonneesUtilisateurDTO> participantsDTO) {
         if (entite == null) {
             return null;
         }
-        DetailsReunionDTO dto = new DetailsReunionDTO();
-        dto.setIdReunion(entite.getId());
-        dto.setTitre(entite.getTitre());
-        dto.setOrdreDuJour(entite.getOrdreDuJour());
-        if (entite.getDateHeureDebut() != null) {
-            dto.setDateHeureDebut(entite.getDateHeureDebut().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        }
-        dto.setDureeMinutes(entite.getDureeMinutes());
-        dto.setTypeReunion(entite.getTypeReunion());
-        dto.setStatutReunion(entite.getStatutReunion());
-        dto.setIdOrganisateur(entite.getOrganisateurId());
+        String nomOrganisateur = "Inconnu";
         try {
-            Optional<Utilisateur> organisateurOpt = utilisateurDAO.trouverParId(entite.getOrganisateurId());
-            organisateurOpt.ifPresent(utilisateur -> dto.setNomOrganisateur(utilisateur.getNomComplet()));
+            // Supposant que utilisateurDAO.trouverParId attend un int, mais l'ID organisateur est long
+            Optional<Utilisateur> organisateurOpt = utilisateurDAO.trouverParId((int) entite.getOrganisateurId());
+            if (organisateurOpt.isPresent()) {
+                nomOrganisateur = organisateurOpt.get().getNomComplet();
+            }
         } catch (ExceptionPersistance e) {
             journal.warn("Impossible de récupérer le nom de l'organisateur ID {} pour la réunion ID {}: {}", entite.getOrganisateurId(), entite.getId(), e.getMessage());
-            dto.setNomOrganisateur("Inconnu");
         }
-        dto.setMotDePasseOptionnelValeur(entite.getMotDePasseOptionnel());
 
-        return dto;
+        return new DetailsReunionDTO(
+                entite.getId(),
+                entite.getTitre(),
+                entite.getDescription(),
+                entite.getDateHeureDebut(),
+                entite.getDureeEstimeeMinutes(),
+                entite.getTypeReunion(),
+                entite.getStatutReunion(),
+                entite.getOrganisateurId(),
+                nomOrganisateur,
+                entite.getMotDePasseOptionnel(),
+                participantsDTO != null ? participantsDTO : new ArrayList<>(), // Assurer une liste non nulle
+                entite.getDateCreationReunion()
+        );
     }
 
-    public DetailsReunionDTO creerNouvelleReunion(String titre, String ordreDuJour, String dateHeureDebutStr, int dureeMinutes, TypeReunion typeReunion, String motDePasseOptionnel, int idOrganisateur) {
+    public Optional<DetailsReunionDTO> creerNouvelleReunion(String titre, String description, LocalDateTime dateHeureDebut, int dureeMinutes, TypeReunion typeReunion, String motDePasseOptionnel, long idOrganisateur) {
         journal.debug("Tentative de création d'une nouvelle réunion par l'utilisateur ID {}", idOrganisateur);
         try {
             ValidateurEntreeUtilisateur.validerNonNulOuVide(titre, "Titre de la réunion");
             if (dureeMinutes <= 0) {
                 throw new IllegalArgumentException("La durée en minutes doit être positive.");
             }
-            LocalDateTime dateHeureDebut = LocalDateTime.parse(dateHeureDebutStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            if (dateHeureDebut == null || dateHeureDebut.isBefore(LocalDateTime.now().plusMinutes(1))) {
+                throw new IllegalArgumentException("La date et heure de début doit être dans le futur.");
+            }
+            if (typeReunion == TypeReunion.PRIVEE && (motDePasseOptionnel == null || motDePasseOptionnel.trim().isEmpty())) {
+                journal.warn("Création d'une réunion privée ID {} sans mot de passe par l'utilisateur ID {}.", titre, idOrganisateur);
+            }
 
             Reunion nouvelleReunionEntite = new Reunion();
             nouvelleReunionEntite.setTitre(titre);
-            nouvelleReunionEntite.setOrdreDuJour(ordreDuJour);
+            nouvelleReunionEntite.setDescription(description); // Utiliser setDescription
             nouvelleReunionEntite.setDateHeureDebut(dateHeureDebut);
-            nouvelleReunionEntite.setDureeMinutes(dureeMinutes);
+            nouvelleReunionEntite.setDureeEstimeeMinutes(dureeMinutes); // Utiliser setDureeEstimeeMinutes
             nouvelleReunionEntite.setTypeReunion(typeReunion);
             nouvelleReunionEntite.setStatutReunion(StatutReunion.PLANIFIEE);
             nouvelleReunionEntite.setOrganisateurId(idOrganisateur);
-            if (typeReunion == TypeReunion.PRIVEE && (motDePasseOptionnel == null || motDePasseOptionnel.trim().isEmpty())) {
-                journal.warn("Tentative de création d'une réunion privée sans mot de passe par l'utilisateur ID {}", idOrganisateur);
-            }
             nouvelleReunionEntite.setMotDePasseOptionnel(motDePasseOptionnel != null ? motDePasseOptionnel.trim() : null);
             nouvelleReunionEntite.setDateCreationReunion(LocalDateTime.now());
 
             Reunion reunionCreee = this.reunionDAO.creer(nouvelleReunionEntite);
 
             if (reunionCreee != null && reunionCreee.getId() > 0) {
-                this.participationReunionDAO.ajouterParticipant(reunionCreee.getId(), idOrganisateur, RoleDansReunion.ORGANISATEUR, StatutParticipationReunion.REJOINT);
+                this.participationReunionDAO.ajouterParticipant((int)reunionCreee.getId(), (int)idOrganisateur, RoleDansReunion.ORGANISATEUR, StatutParticipationReunion.REJOINT);
                 journal.info("Nouvelle réunion '{}' (ID: {}) créée par l'utilisateur ID {}.", titre, reunionCreee.getId(), idOrganisateur);
-                return convertirEntiteReunionVersDTO(reunionCreee);
+                List<DonneesUtilisateurDTO> participantsInitiaux = this.participationReunionDAO.recupererParticipantsDetailsParIdReunion((int)reunionCreee.getId());
+                return Optional.of(convertirEntiteReunionVersDTO(reunionCreee, participantsInitiaux));
             } else {
                 journal.error("Échec de la persistance de la nouvelle réunion '{}' par l'utilisateur ID {}.", titre, idOrganisateur);
-                return null;
+                return Optional.empty();
             }
-        } catch (DateTimeParseException e) {
-            journal.error("Format de dateHeureDebut invalide '{}' fourni par l'utilisateur ID {}.", dateHeureDebutStr, idOrganisateur, e);
-            return null;
-        } catch (IllegalArgumentException | ExceptionPersistance e) {
-            journal.error("Erreur lors de la création de la nouvelle réunion '{}' par l'utilisateur ID {}: {}", titre, idOrganisateur, e.getMessage(), e);
-            return null;
+        } catch (IllegalArgumentException | DateTimeParseException e) {
+            journal.error("Données invalides pour la création de la nouvelle réunion '{}' par l'utilisateur ID {}: {}", titre, idOrganisateur, e.getMessage(), e);
+            return Optional.empty();
+        } catch (ExceptionPersistance e) {
+            journal.error("Erreur de persistance lors de la création de la nouvelle réunion '{}' par l'utilisateur ID {}: {}", titre, idOrganisateur, e.getMessage(), e);
+            return Optional.empty();
         }
     }
 
@@ -118,38 +122,33 @@ public class ServiceGestionReunions {
         List<Reunion> reunionsOuvertes = this.reunionDAO.trouverParStatut(StatutReunion.OUVERTE);
 
         return Stream.concat(reunionsPlanifiees.stream(), reunionsOuvertes.stream())
-                .map(this::convertirEntiteReunionVersDTO)
+                .map(entite -> convertirEntiteReunionVersDTO(entite, new ArrayList<>()))
                 .collect(Collectors.toList());
     }
 
-    public List<DetailsReunionDTO> listerReunionsParUtilisateur(int idUtilisateur) throws ExceptionPersistance {
-        journal.debug("Listage des réunions pour l'utilisateur ID {}.", idUtilisateur);
-        List<Reunion> reunionsOrganisees = this.reunionDAO.trouverParOrganisateurId(idUtilisateur);
+    public List<DetailsReunionDTO> listerReunionsParOrganisateur(long idOrganisateur) throws ExceptionPersistance {
+        journal.debug("Listage des réunions pour l'organisateur ID {}.", idOrganisateur);
+        List<Reunion> reunionsOrganisees = this.reunionDAO.trouverParOrganisateurId((int)idOrganisateur);
         return reunionsOrganisees.stream()
-                .map(this::convertirEntiteReunionVersDTO)
+                .map(entite -> convertirEntiteReunionVersDTO(entite, new ArrayList<>()))
                 .collect(Collectors.toList());
     }
 
-
-    public DetailsReunionDTO obtenirDetailsReunion(int idReunion) throws ExceptionPersistance {
+    public Optional<DetailsReunionDTO> obtenirDetailsReunion(long idReunion) throws ExceptionPersistance {
         journal.debug("Obtention des détails pour la réunion ID {}.", idReunion);
-        Reunion reunionEntite = this.reunionDAO.trouverParId(idReunion);
+        Reunion reunionEntite = this.reunionDAO.trouverParId((int)idReunion);
         if (reunionEntite == null) {
             journal.warn("Réunion ID {} non trouvée.", idReunion);
-            return null;
+            return Optional.empty();
         }
-        DetailsReunionDTO dto = convertirEntiteReunionVersDTO(reunionEntite);
-        if (dto != null) {
-            List<DonneesUtilisateurDTO> participantsDTO = this.participationReunionDAO.recupererParticipantsDetailsParIdReunion(idReunion);
-            dto.setParticipants(participantsDTO);
-        }
-        return dto;
+        List<DonneesUtilisateurDTO> participantsDTO = this.participationReunionDAO.recupererParticipantsDetailsParIdReunion((int)idReunion);
+        return Optional.of(convertirEntiteReunionVersDTO(reunionEntite, participantsDTO));
     }
 
-    public ReponseGeneriqueDTO rejoindreReunion(int idReunion, int idUtilisateur, ThreadClientDedie clientThread, String motDePasseFourni) {
+    public ReponseGeneriqueDTO rejoindreReunion(long idReunion, long idUtilisateur, ThreadClientDedie clientThread, String motDePasseFourni) {
         journal.debug("Tentative de l'utilisateur ID {} de rejoindre la réunion ID {}.", idUtilisateur, idReunion);
         try {
-            Reunion reunionEntite = this.reunionDAO.trouverParId(idReunion);
+            Reunion reunionEntite = this.reunionDAO.trouverParId((int)idReunion);
             if (reunionEntite == null) {
                 return new ReponseGeneriqueDTO(false, "Réunion non trouvée.", "REUNION_INEXISTANTE");
             }
@@ -159,46 +158,37 @@ public class ServiceGestionReunions {
             if (reunionEntite.getTypeReunion() == TypeReunion.PRIVEE) {
                 String motDePasseReunion = reunionEntite.getMotDePasseOptionnel();
                 if (motDePasseReunion == null || motDePasseReunion.isEmpty()) {
-                    journal.warn("Réunion privée ID {} sans mot de passe défini, accès refusé par mesure de sécurité.", idReunion);
-                    return new ReponseGeneriqueDTO(false, "Cette réunion privée est mal configurée (pas de mot de passe).", "REUNION_PRIVEE_MDP_MANQUANT");
+                    return new ReponseGeneriqueDTO(false, "Configuration de mot de passe invalide pour cette réunion privée.", "REUNION_PRIVEE_MDP_ERREUR_CONFIG");
                 }
                 if (!motDePasseReunion.equals(motDePasseFourni)) {
                     return new ReponseGeneriqueDTO(false, "Mot de passe incorrect pour la réunion privée.", "MDP_INCORRECT");
                 }
             }
 
-            RoleDansReunion roleExistant = participationReunionDAO.recupererRoleDansReunion(idReunion, idUtilisateur);
+            RoleDansReunion roleExistant = participationReunionDAO.recupererRoleDansReunion((int)idReunion, (int)idUtilisateur);
             if (roleExistant == null) {
-                this.participationReunionDAO.ajouterParticipant(idReunion, idUtilisateur, RoleDansReunion.PARTICIPANT, StatutParticipationReunion.INVITE);
+                this.participationReunionDAO.ajouterParticipant((int)idReunion, (int)idUtilisateur, RoleDansReunion.PARTICIPANT, StatutParticipationReunion.REJOINT);
+            } else {
+                this.participationReunionDAO.mettreAJourStatutParticipation((int)idReunion, (int)idUtilisateur, StatutParticipationReunion.REJOINT);
             }
 
-            boolean majStatut = this.participationReunionDAO.mettreAJourStatutParticipation(idReunion, idUtilisateur, StatutParticipationReunion.REJOINT);
-            if (majStatut) {
-                this.serviceCommunication.enregistrerParticipantConnecte(idReunion, clientThread);
-                journal.info("Utilisateur ID {} a rejoint la réunion ID {}.", idUtilisateur, idReunion);
-                return new ReponseGeneriqueDTO(true, "Vous avez rejoint la réunion.");
-            } else {
-                journal.warn("Échec de la mise à jour du statut de participation pour l'utilisateur ID {} dans la réunion ID {}.", idUtilisateur, idReunion);
-                return new ReponseGeneriqueDTO(false, "Impossible de mettre à jour le statut de participation.", "MAJ_STATUT_ECHEC");
-            }
+            this.serviceCommunication.enregistrerParticipantConnecte(idReunion, clientThread);
+            journal.info("Utilisateur ID {} a rejoint la réunion ID {}.", idUtilisateur, idReunion);
+            return new ReponseGeneriqueDTO(true, "Vous avez rejoint la réunion.");
+
         } catch (ExceptionPersistance e) {
             journal.error("Erreur de persistance en tentant de rejoindre la réunion ID {}: {}", idReunion, e.getMessage(), e);
             return new ReponseGeneriqueDTO(false, "Erreur serveur lors de la tentative de rejoindre la réunion.", "ERREUR_SERVEUR_REJOINDRE");
         }
     }
 
-    public ReponseGeneriqueDTO quitterReunion(int idReunion, int idUtilisateur, ThreadClientDedie clientThread) {
+    public ReponseGeneriqueDTO quitterReunion(long idReunion, long idUtilisateur, ThreadClientDedie clientThread) {
         journal.debug("Tentative de l'utilisateur ID {} de quitter la réunion ID {}.", idUtilisateur, idReunion);
         try {
-            boolean majStatut = this.participationReunionDAO.mettreAJourStatutParticipation(idReunion, idUtilisateur, StatutParticipationReunion.PARTI);
+            this.participationReunionDAO.mettreAJourStatutParticipation((int)idReunion, (int)idUtilisateur, StatutParticipationReunion.PARTI);
             this.serviceCommunication.retirerParticipantConnecte(idReunion, clientThread);
-            if(majStatut) {
-                journal.info("Utilisateur ID {} a quitté la réunion ID {}.", idUtilisateur, idReunion);
-                return new ReponseGeneriqueDTO(true, "Vous avez quitté la réunion.");
-            } else {
-                journal.warn("Échec de la mise à jour du statut (PARTI) pour l'utilisateur ID {} dans la réunion ID {}, mais retiré de la communication.", idUtilisateur, idReunion);
-                return new ReponseGeneriqueDTO(false, "Impossible de mettre à jour le statut de départ, mais vous êtes déconnecté de la communication.", "MAJ_STATUT_PARTI_ECHEC");
-            }
+            journal.info("Utilisateur ID {} a quitté la réunion ID {}.", idUtilisateur, idReunion);
+            return new ReponseGeneriqueDTO(true, "Vous avez quitté la réunion.");
         } catch (ExceptionPersistance e) {
             journal.error("Erreur de persistance en tentant de quitter la réunion ID {}: {}", idReunion, e.getMessage(), e);
             this.serviceCommunication.retirerParticipantConnecte(idReunion, clientThread);
@@ -206,10 +196,10 @@ public class ServiceGestionReunions {
         }
     }
 
-    public ReponseGeneriqueDTO ouvrirReunion(int idReunion, int idOrganisateurDemandeur) {
+    public ReponseGeneriqueDTO ouvrirReunion(long idReunion, long idOrganisateurDemandeur) {
         journal.debug("Tentative d'ouverture de la réunion ID {} par l'utilisateur ID {}.", idReunion, idOrganisateurDemandeur);
         try {
-            Reunion reunionEntite = this.reunionDAO.trouverParId(idReunion);
+            Reunion reunionEntite = this.reunionDAO.trouverParId((int)idReunion);
             if (reunionEntite == null) {
                 return new ReponseGeneriqueDTO(false, "Réunion non trouvée.", "REUNION_INEXISTANTE");
             }
@@ -234,10 +224,10 @@ public class ServiceGestionReunions {
         }
     }
 
-    public ReponseGeneriqueDTO cloreReunion(int idReunion, int idOrganisateurDemandeur) {
+    public ReponseGeneriqueDTO cloreReunion(long idReunion, long idOrganisateurDemandeur) {
         journal.debug("Tentative de clôture de la réunion ID {} par l'utilisateur ID {}.", idReunion, idOrganisateurDemandeur);
         try {
-            Reunion reunionEntite = this.reunionDAO.trouverParId(idReunion);
+            Reunion reunionEntite = this.reunionDAO.trouverParId((int)idReunion);
             if (reunionEntite == null) {
                 return new ReponseGeneriqueDTO(false, "Réunion non trouvée.", "REUNION_INEXISTANTE");
             }

@@ -1,20 +1,19 @@
 package akandan.bahou.kassy.serveur.dao;
 
+import akandan.bahou.kassy.commun.modele.StatutReunion;
+import akandan.bahou.kassy.commun.modele.TypeReunion;
+import akandan.bahou.kassy.commun.util.ExceptionPersistance;
+import akandan.bahou.kassy.serveur.modele.Reunion;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-
-import akandan.bahou.kassy.serveur.modele.Reunion;
-import akandan.bahou.kassy.commun.modele.TypeReunion;
-import akandan.bahou.kassy.commun.modele.StatutReunion;
-import akandan.bahou.kassy.commun.util.ExceptionPersistance;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,13 +22,35 @@ public class ReunionDAOImpl implements InterfaceReunionDAO {
     private final GestionnaireConnexionBaseDeDonnees gestionnaireDeConnexions;
     private static final Logger journal = LoggerFactory.getLogger(ReunionDAOImpl.class);
 
-    private static final String REQUETE_CREER_REUNION = "INSERT INTO meetings (title, agenda, datetime, duration, type, status, organizer_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
-    private static final String REQUETE_TROUVER_PAR_ID = "SELECT id, title, agenda, datetime, duration, type, status, organizer_id, created_at FROM meetings WHERE id = ?";
-    private static final String REQUETE_TROUVER_TOUTES = "SELECT id, title, agenda, datetime, duration, type, status, organizer_id, created_at FROM meetings ORDER BY datetime DESC";
-    private static final String REQUETE_METTRE_A_JOUR_REUNION = "UPDATE meetings SET title=?, agenda=?, datetime=?, duration=?, type=?, status=? WHERE id = ?";
-    private static final String REQUETE_SUPPRIMER_REUNION = "DELETE FROM meetings WHERE id = ?";
-    private static final String REQUETE_TROUVER_PAR_ORGANISATEUR_ID = "SELECT id, title, agenda, datetime, duration, type, status, organizer_id, created_at FROM meetings WHERE organizer_id = ? ORDER BY datetime DESC";
-    private static final String REQUETE_TROUVER_PAR_STATUT = "SELECT id, title, agenda, datetime, duration, type, status, organizer_id, created_at FROM meetings WHERE status = ? ORDER BY datetime DESC";
+    // Noms de colonnes basés sur le schéma SQL (généralement en minuscules_avec_tirets)
+    private static final String TABLE_REUNIONS = "reunions";
+    private static final String COL_ID = "id";
+    private static final String COL_TITRE = "titre";
+    private static final String COL_DESCRIPTION = "description"; // ou ordre_du_jour si c'est le nom exact de la colonne
+    private static final String COL_DATE_HEURE_DEBUT = "date_heure_debut";
+    private static final String COL_DUREE_MINUTES = "duree_minutes"; // ou duree_estimee_minutes
+    private static final String COL_TYPE_REUNION = "type_reunion";
+    private static final String COL_STATUT_REUNION = "statut_reunion";
+    private static final String COL_ORGANISATEUR_ID = "organisateur_id";
+    private static final String COL_MOT_DE_PASSE_REUNION = "mot_de_passe_reunion";
+    private static final String COL_DATE_CREATION_REUNION = "date_creation_reunion";
+
+
+    private static final String REQUETE_CREER_REUNION = "INSERT INTO " + TABLE_REUNIONS +
+            " (" + COL_TITRE + ", " + COL_DESCRIPTION + ", " + COL_DATE_HEURE_DEBUT + ", " + COL_DUREE_MINUTES + ", " +
+            COL_TYPE_REUNION + ", " + COL_STATUT_REUNION + ", " + COL_ORGANISATEUR_ID + ", " + COL_MOT_DE_PASSE_REUNION + ", " + COL_DATE_CREATION_REUNION +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    private static final String REQUETE_TROUVER_PAR_ID = "SELECT * FROM " + TABLE_REUNIONS + " WHERE " + COL_ID + " = ?";
+    private static final String REQUETE_TROUVER_TOUTES = "SELECT * FROM " + TABLE_REUNIONS + " ORDER BY " + COL_DATE_HEURE_DEBUT + " DESC";
+    private static final String REQUETE_METTRE_A_JOUR_REUNION = "UPDATE " + TABLE_REUNIONS + " SET " +
+            COL_TITRE + "=?, " + COL_DESCRIPTION + "=?, " + COL_DATE_HEURE_DEBUT + "=?, " + COL_DUREE_MINUTES + "=?, " +
+            COL_TYPE_REUNION + "=?, " + COL_STATUT_REUNION + "=?, " + COL_MOT_DE_PASSE_REUNION + "=? " +
+            "WHERE " + COL_ID + " = ?";
+    private static final String REQUETE_SUPPRIMER_REUNION = "DELETE FROM " + TABLE_REUNIONS + " WHERE " + COL_ID + " = ?";
+    private static final String REQUETE_TROUVER_PAR_ORGANISATEUR_ID = "SELECT * FROM " + TABLE_REUNIONS +
+            " WHERE " + COL_ORGANISATEUR_ID + " = ? ORDER BY " + COL_DATE_HEURE_DEBUT + " DESC";
+    private static final String REQUETE_TROUVER_PAR_STATUT = "SELECT * FROM " + TABLE_REUNIONS +
+            " WHERE " + COL_STATUT_REUNION + " = ? ORDER BY " + COL_DATE_HEURE_DEBUT + " DESC";
 
     public ReunionDAOImpl(GestionnaireConnexionBaseDeDonnees gestionnaireDeConnexions) {
         this.gestionnaireDeConnexions = gestionnaireDeConnexions;
@@ -37,36 +58,22 @@ public class ReunionDAOImpl implements InterfaceReunionDAO {
 
     private Reunion hydraterReunionDepuisResultSet(ResultSet rs) throws SQLException {
         Reunion reunion = new Reunion();
-        reunion.setId(rs.getInt("id"));
-        reunion.setTitre(rs.getString("title"));
-        reunion.setOrdreDuJour(rs.getString("agenda"));
-        Timestamp dateHeureDebutSql = rs.getTimestamp("datetime");
+        reunion.setId(rs.getLong(COL_ID));
+        reunion.setTitre(rs.getString(COL_TITRE));
+        reunion.setDescription(rs.getString(COL_DESCRIPTION));
+        Timestamp dateHeureDebutSql = rs.getTimestamp(COL_DATE_HEURE_DEBUT);
         if (dateHeureDebutSql != null) {
             reunion.setDateHeureDebut(dateHeureDebutSql.toLocalDateTime());
         }
-        reunion.setDureeMinutes(rs.getInt("duration"));
-
-        String typeReunionDb = rs.getString("type");
-        try {
-            reunion.setTypeReunion(TypeReunion.valueOf(typeReunionDb.toUpperCase().replace("É", "E"))); // Handle "Privée" -> PRIVEE
-        } catch (IllegalArgumentException e) {
-            journal.warn("Type de réunion inconnu depuis DB: '{}'", typeReunionDb);
-            // Gérer le cas où la valeur de la DB ne correspond à aucun enum, peut-être affecter une valeur par défaut ou laisser null
-        }
-
-        String statutReunionDb = rs.getString("status");
-        try {
-            reunion.setStatutReunion(StatutReunion.valueOf(statutReunionDb.toUpperCase().replace("É", "E").replace("É", "E"))); // Handle "Planifiée", "Ouverte", "Terminée", "Annulée"
-        } catch (IllegalArgumentException e) {
-            journal.warn("Statut de réunion inconnu depuis DB: '{}'", statutReunionDb);
-        }
-
-        reunion.setOrganisateurId(rs.getInt("organizer_id"));
-        Timestamp dateCreationSql = rs.getTimestamp("created_at");
+        reunion.setDureeEstimeeMinutes(rs.getInt(COL_DUREE_MINUTES));
+        reunion.setTypeReunion(TypeReunion.valueOf(rs.getString(COL_TYPE_REUNION)));
+        reunion.setStatutReunion(StatutReunion.valueOf(rs.getString(COL_STATUT_REUNION)));
+        reunion.setOrganisateurId(rs.getLong(COL_ORGANISATEUR_ID));
+        reunion.setMotDePasseOptionnel(rs.getString(COL_MOT_DE_PASSE_REUNION));
+        Timestamp dateCreationSql = rs.getTimestamp(COL_DATE_CREATION_REUNION);
         if (dateCreationSql != null) {
             reunion.setDateCreationReunion(dateCreationSql.toLocalDateTime());
         }
-        // motDePasseOptionnel n'est pas dans le schema de la table meetings
         return reunion;
     }
 
@@ -76,19 +83,24 @@ public class ReunionDAOImpl implements InterfaceReunionDAO {
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_CREER_REUNION, Statement.RETURN_GENERATED_KEYS)) {
 
             declarationPreparee.setString(1, reunionACreer.getTitre());
-            declarationPreparee.setString(2, reunionACreer.getOrdreDuJour());
+            declarationPreparee.setString(2, reunionACreer.getDescription());
             declarationPreparee.setTimestamp(3, Timestamp.valueOf(reunionACreer.getDateHeureDebut()));
-            declarationPreparee.setInt(4, reunionACreer.getDureeMinutes());
-            declarationPreparee.setString(5, reunionACreer.getTypeReunion().name()); // Assuming DB stores uppercase
-            declarationPreparee.setString(6, reunionACreer.getStatutReunion().name()); // Assuming DB stores uppercase
-            declarationPreparee.setInt(7, reunionACreer.getOrganisateurId());
-            // created_at est géré par DB DEFAULT CURRENT_TIMESTAMP
+            declarationPreparee.setInt(4, reunionACreer.getDureeEstimeeMinutes());
+            declarationPreparee.setString(5, reunionACreer.getTypeReunion().name());
+            declarationPreparee.setString(6, reunionACreer.getStatutReunion().name());
+            declarationPreparee.setLong(7, reunionACreer.getOrganisateurId());
+            if (reunionACreer.getMotDePasseOptionnel() != null) {
+                declarationPreparee.setString(8, reunionACreer.getMotDePasseOptionnel());
+            } else {
+                declarationPreparee.setNull(8, Types.VARCHAR);
+            }
+            declarationPreparee.setTimestamp(9, Timestamp.valueOf(reunionACreer.getDateCreationReunion()));
 
             int lignesAffectees = declarationPreparee.executeUpdate();
             if (lignesAffectees > 0) {
                 try (ResultSet clesGenerees = declarationPreparee.getGeneratedKeys()) {
                     if (clesGenerees.next()) {
-                        reunionACreer.setId(clesGenerees.getInt(1));
+                        reunionACreer.setId(clesGenerees.getLong(1));
                     }
                 }
             }
@@ -96,17 +108,17 @@ public class ReunionDAOImpl implements InterfaceReunionDAO {
             return reunionACreer;
 
         } catch (SQLException e) {
-            journal.error("Erreur SQL lors de la création de la réunion : {}", reunionACreer.getTitre(), e);
+            journal.error("Erreur SQL lors de la création de la réunion '{}': {}", reunionACreer.getTitre(), e.getMessage(), e);
             throw new ExceptionPersistance("Erreur lors de la création de la réunion.", e);
         }
     }
 
     @Override
-    public Reunion trouverParId(int idReunion) throws ExceptionPersistance {
+    public Reunion trouverParId(int idReunion) throws ExceptionPersistance { // Interface utilise int
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_TROUVER_PAR_ID)) {
 
-            declarationPreparee.setInt(1, idReunion);
+            declarationPreparee.setLong(1, idReunion); // cohérence avec l'ID en long
             try (ResultSet resultSet = declarationPreparee.executeQuery()) {
                 if (resultSet.next()) {
                     Reunion reunion = hydraterReunionDepuisResultSet(resultSet);
@@ -148,12 +160,17 @@ public class ReunionDAOImpl implements InterfaceReunionDAO {
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_METTRE_A_JOUR_REUNION)) {
 
             declarationPreparee.setString(1, reunionAMettreAJour.getTitre());
-            declarationPreparee.setString(2, reunionAMettreAJour.getOrdreDuJour());
+            declarationPreparee.setString(2, reunionAMettreAJour.getDescription());
             declarationPreparee.setTimestamp(3, Timestamp.valueOf(reunionAMettreAJour.getDateHeureDebut()));
-            declarationPreparee.setInt(4, reunionAMettreAJour.getDureeMinutes());
-            declarationPreparee.setString(5, reunionAMettreAJour.getTypeReunion().name()); // Assuming DB stores uppercase
-            declarationPreparee.setString(6, reunionAMettreAJour.getStatutReunion().name()); // Assuming DB stores uppercase
-            declarationPreparee.setInt(7, reunionAMettreAJour.getId());
+            declarationPreparee.setInt(4, reunionAMettreAJour.getDureeEstimeeMinutes());
+            declarationPreparee.setString(5, reunionAMettreAJour.getTypeReunion().name());
+            declarationPreparee.setString(6, reunionAMettreAJour.getStatutReunion().name());
+            if (reunionAMettreAJour.getMotDePasseOptionnel() != null) {
+                declarationPreparee.setString(7, reunionAMettreAJour.getMotDePasseOptionnel());
+            } else {
+                declarationPreparee.setNull(7, Types.VARCHAR);
+            }
+            declarationPreparee.setLong(8, reunionAMettreAJour.getId());
 
             int lignesAffectees = declarationPreparee.executeUpdate();
             journal.debug("Mise à jour de la réunion ID : {}, lignes affectées : {}", reunionAMettreAJour.getId(), lignesAffectees);
@@ -166,11 +183,11 @@ public class ReunionDAOImpl implements InterfaceReunionDAO {
     }
 
     @Override
-    public boolean supprimer(int idReunion) throws ExceptionPersistance {
+    public boolean supprimer(int idReunion) throws ExceptionPersistance { // Interface utilise int
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_SUPPRIMER_REUNION)) {
 
-            declarationPreparee.setInt(1, idReunion);
+            declarationPreparee.setLong(1, idReunion); // cohérence avec l'ID en long
             int lignesAffectees = declarationPreparee.executeUpdate();
             journal.debug("Suppression de la réunion ID : {}, lignes affectées : {}", idReunion, lignesAffectees);
             return lignesAffectees > 0;
@@ -182,12 +199,12 @@ public class ReunionDAOImpl implements InterfaceReunionDAO {
     }
 
     @Override
-    public List<Reunion> trouverParOrganisateurId(int idOrganisateur) throws ExceptionPersistance {
+    public List<Reunion> trouverParOrganisateurId(int idOrganisateur) throws ExceptionPersistance { // Interface utilise int
         List<Reunion> reunions = new ArrayList<>();
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_TROUVER_PAR_ORGANISATEUR_ID)) {
 
-            declarationPreparee.setInt(1, idOrganisateur);
+            declarationPreparee.setLong(1, idOrganisateur); // cohérence
             try (ResultSet resultSet = declarationPreparee.executeQuery()) {
                 while (resultSet.next()) {
                     reunions.add(hydraterReunionDepuisResultSet(resultSet));
@@ -208,13 +225,6 @@ public class ReunionDAOImpl implements InterfaceReunionDAO {
         try (Connection connexion = gestionnaireDeConnexions.etablirNouvelleConnexion();
              PreparedStatement declarationPreparee = connexion.prepareStatement(REQUETE_TROUVER_PAR_STATUT)) {
 
-            //The schema uses mixed case French for status. Java enum is UPPERCASE.
-            //A direct .name() might not work if DB ENUM is 'Planifiée' and .name() is 'PLANIFIEE'
-            //For this implementation, we assume the service layer might provide the exact DB string, or DB stores UPPERCASE.
-            //The prompt for InterfaceReunionDAO suggests passing StatutReunion enum directly.
-            //So, we use .name() and rely on DB storing it as such or schema being adapted.
-            //Given schema uses 'Planifiée', 'Ouverte', etc. this will require mapping or schema change.
-            //For now, using .name() as per typical Java enum to DB string practice.
             declarationPreparee.setString(1, statut.name());
             try (ResultSet resultSet = declarationPreparee.executeQuery()) {
                 while (resultSet.next()) {

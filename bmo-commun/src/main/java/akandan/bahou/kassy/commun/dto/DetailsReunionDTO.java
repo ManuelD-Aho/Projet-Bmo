@@ -24,14 +24,18 @@ public class DetailsReunionDTO implements Serializable {
     private StatutReunion statutReunion;
     private long idOrganisateur;
     private String nomOrganisateur;
-    private List<Long> idsParticipants;
-    private int nombreParticipants;
+    private String motDePasseOptionnelValeur;
+    private List<DonneesUtilisateurDTO> participantsDTO;
+    private int nombreParticipants; // Maintenu par la taille de participantsDTO
+    private LocalDateTime dateCreationReunion;
+
 
     public DetailsReunionDTO() {
-        this.idsParticipants = new ArrayList<>();
+        this.participantsDTO = new ArrayList<>();
+        this.nombreParticipants = 0;
     }
 
-    public DetailsReunionDTO(long idReunion, String titre, String description, LocalDateTime dateHeureDebut, int dureeEstimeeMinutes, TypeReunion typeReunion, StatutReunion statutReunion, long idOrganisateur, String nomOrganisateur, List<Long> idsParticipants) {
+    public DetailsReunionDTO(long idReunion, String titre, String description, LocalDateTime dateHeureDebut, int dureeEstimeeMinutes, TypeReunion typeReunion, StatutReunion statutReunion, long idOrganisateur, String nomOrganisateur, String motDePasseOptionnelValeur, List<DonneesUtilisateurDTO> participantsDTO, LocalDateTime dateCreationReunion) {
         this.idReunion = idReunion;
         this.titre = titre;
         this.description = description;
@@ -41,8 +45,10 @@ public class DetailsReunionDTO implements Serializable {
         this.statutReunion = statutReunion;
         this.idOrganisateur = idOrganisateur;
         this.nomOrganisateur = nomOrganisateur;
-        this.idsParticipants = idsParticipants != null ? idsParticipants : new ArrayList<>();
-        this.nombreParticipants = this.idsParticipants.size();
+        this.motDePasseOptionnelValeur = motDePasseOptionnelValeur;
+        this.participantsDTO = participantsDTO != null ? participantsDTO : new ArrayList<>();
+        this.nombreParticipants = this.participantsDTO.size();
+        this.dateCreationReunion = dateCreationReunion;
     }
 
 
@@ -118,29 +124,38 @@ public class DetailsReunionDTO implements Serializable {
         this.nomOrganisateur = nomOrganisateur;
     }
 
-    public List<Long> getIdsParticipants() {
-        return idsParticipants;
+    public String getMotDePasseOptionnelValeur() {
+        return motDePasseOptionnelValeur;
     }
 
-    public void setIdsParticipants(List<Long> idsParticipants) {
-        this.idsParticipants = idsParticipants != null ? idsParticipants : new ArrayList<>();
-        this.nombreParticipants = this.idsParticipants.size();
+    public void setMotDePasseOptionnelValeur(String motDePasseOptionnelValeur) {
+        this.motDePasseOptionnelValeur = motDePasseOptionnelValeur;
+    }
+
+    public List<DonneesUtilisateurDTO> getParticipantsDTO() {
+        return participantsDTO;
+    }
+
+    public void setParticipantsDTO(List<DonneesUtilisateurDTO> participantsDTO) {
+        this.participantsDTO = participantsDTO != null ? participantsDTO : new ArrayList<>();
+        this.nombreParticipants = this.participantsDTO.size();
     }
 
     public int getNombreParticipants() {
-        // Recalculer au cas où la liste a été modifiée directement (bien que non recommandé)
-        if (this.idsParticipants != null) {
-            return this.idsParticipants.size();
-        }
-        return nombreParticipants; // Retourner la valeur stockée si la liste est nulle
+        return nombreParticipants; // Dérivé de la taille de la liste
     }
 
-    public void setNombreParticipants(int nombreParticipants) {
-        // Ce setter est moins utile si nombreParticipants est toujours dérivé de idsParticipants.size()
-        // Mais peut être utilisé si le nombre est fourni explicitement par le serveur.
-        this.nombreParticipants = nombreParticipants;
+    // Pas de setter direct pour nombreParticipants s'il est toujours dérivé
+    // public void setNombreParticipants(int nombreParticipants) { this.nombreParticipants = nombreParticipants; }
+
+
+    public LocalDateTime getDateCreationReunion() {
+        return dateCreationReunion;
     }
 
+    public void setDateCreationReunion(LocalDateTime dateCreationReunion) {
+        this.dateCreationReunion = dateCreationReunion;
+    }
 
     public String toJsonString() throws JSONException {
         JSONObject jsonObject = new JSONObject();
@@ -159,15 +174,21 @@ public class DetailsReunionDTO implements Serializable {
         }
         jsonObject.put("idOrganisateur", this.idOrganisateur);
         jsonObject.put("nomOrganisateur", this.nomOrganisateur);
+        jsonObject.put("motDePasseOptionnelValeur", this.motDePasseOptionnelValeur);
 
-        if (this.idsParticipants != null) {
+        if (this.participantsDTO != null) {
             JSONArray participantsArray = new JSONArray();
-            for (Long id : this.idsParticipants) {
-                participantsArray.put(id);
+            for (DonneesUtilisateurDTO participant : this.participantsDTO) {
+                if (participant != null) {
+                    participantsArray.put(new JSONObject(participant.toJsonString())); // Sérialiser chaque DTO participant
+                }
             }
-            jsonObject.put("idsParticipants", participantsArray);
+            jsonObject.put("participantsDTO", participantsArray);
         }
-        jsonObject.put("nombreParticipants", getNombreParticipants()); // Utiliser le getter pour la cohérence
+        jsonObject.put("nombreParticipants", this.nombreParticipants);
+        if (this.dateCreationReunion != null) {
+            jsonObject.put("dateCreationReunion", this.dateCreationReunion.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        }
         return jsonObject.toString();
     }
 
@@ -185,61 +206,63 @@ public class DetailsReunionDTO implements Serializable {
         if (jsonObject.has("dateHeureDebut") && !jsonObject.isNull("dateHeureDebut")) {
             try {
                 dto.setDateHeureDebut(LocalDateTime.parse(jsonObject.getString("dateHeureDebut"), DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            } catch (DateTimeParseException e) {
-                // Log l'erreur
-            }
+            } catch (DateTimeParseException e) { /* Log error */ }
         }
         dto.setDureeEstimeeMinutes(jsonObject.optInt("dureeEstimeeMinutes"));
 
         if (jsonObject.has("typeReunion") && !jsonObject.isNull("typeReunion")) {
             try {
                 dto.setTypeReunion(TypeReunion.valueOf(jsonObject.getString("typeReunion")));
-            } catch (IllegalArgumentException e) {
-                // Log l'erreur
-            }
+            } catch (IllegalArgumentException e) { /* Log error */ }
         }
         if (jsonObject.has("statutReunion") && !jsonObject.isNull("statutReunion")) {
             try {
                 dto.setStatutReunion(StatutReunion.valueOf(jsonObject.getString("statutReunion")));
-            } catch (IllegalArgumentException e) {
-                // Log l'erreur
-            }
+            } catch (IllegalArgumentException e) { /* Log error */ }
         }
         dto.setIdOrganisateur(jsonObject.optLong("idOrganisateur"));
         dto.setNomOrganisateur(jsonObject.optString("nomOrganisateur", null));
+        dto.setMotDePasseOptionnelValeur(jsonObject.optString("motDePasseOptionnelValeur", null));
 
-        if (jsonObject.has("idsParticipants") && !jsonObject.isNull("idsParticipants")) {
-            JSONArray participantsArray = jsonObject.getJSONArray("idsParticipants");
-            List<Long> ids = new ArrayList<>();
+        if (jsonObject.has("participantsDTO") && !jsonObject.isNull("participantsDTO")) {
+            JSONArray participantsArray = jsonObject.getJSONArray("participantsDTO");
+            List<DonneesUtilisateurDTO> participants = new ArrayList<>();
             for (int i = 0; i < participantsArray.length(); i++) {
-                ids.add(participantsArray.getLong(i));
+                JSONObject participantJson = participantsArray.optJSONObject(i);
+                if (participantJson != null) {
+                    participants.add(DonneesUtilisateurDTO.fromJson(participantJson.toString()));
+                }
             }
-            dto.setIdsParticipants(ids);
+            dto.setParticipantsDTO(participants);
         }
-        // Le nombre de participants est recalculé par setIdsParticipants,
-        // mais on peut aussi le prendre du JSON s'il est explicitement envoyé.
-        if (jsonObject.has("nombreParticipants")) {
-            dto.setNombreParticipants(jsonObject.optInt("nombreParticipants", dto.getNombreParticipants()));
+        dto.nombreParticipants = dto.getParticipantsDTO().size(); // Assurer la cohérence
+
+        if (jsonObject.has("dateCreationReunion") && !jsonObject.isNull("dateCreationReunion")) {
+            try {
+                dto.setDateCreationReunion(LocalDateTime.parse(jsonObject.getString("dateCreationReunion"), DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            } catch (DateTimeParseException e) { /* Log error */ }
         }
-
-
         return dto;
     }
 
     @Override
     public String toString() {
-        return "DetailsReunionDTO{" +
-                "idReunion=" + idReunion +
-                ", titre='" + titre + '\'' +
-                ", description='" + description + '\'' +
-                ", dateHeureDebut=" + dateHeureDebut +
-                ", dureeEstimeeMinutes=" + dureeEstimeeMinutes +
-                ", typeReunion=" + typeReunion +
-                ", statutReunion=" + statutReunion +
-                ", idOrganisateur=" + idOrganisateur +
-                ", nomOrganisateur='" + nomOrganisateur + '\'' +
-                ", idsParticipants=" + idsParticipants +
-                ", nombreParticipants=" + getNombreParticipants() +
-                '}';
+        try {
+            return toJsonString();
+        } catch (JSONException e) {
+            return "DetailsReunionDTO{" +
+                    "idReunion=" + idReunion +
+                    ", titre='" + titre + '\'' +
+                    ", description='" + description + '\'' +
+                    ", dateHeureDebut=" + dateHeureDebut +
+                    ", dureeEstimeeMinutes=" + dureeEstimeeMinutes +
+                    ", typeReunion=" + typeReunion +
+                    ", statutReunion=" + statutReunion +
+                    ", idOrganisateur=" + idOrganisateur +
+                    ", nomOrganisateur='" + nomOrganisateur + '\'' +
+                    ", nombreParticipants=" + getNombreParticipants() +
+                    ", (Erreur JSON: " + e.getMessage() + ")" +
+                    '}';
+        }
     }
 }

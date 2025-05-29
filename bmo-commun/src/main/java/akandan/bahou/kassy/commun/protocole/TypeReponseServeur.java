@@ -33,6 +33,7 @@ public enum TypeReponseServeur {
     ADMIN_CONFIG_MODIFIEE("ADMIN_CONFIG_MODIFIEE"),
     LISTE_UTILISATEURS("LISTE_UTILISATEURS");
 
+
     private final String valeurProtocole;
 
     TypeReponseServeur(String valeurProtocole) {
