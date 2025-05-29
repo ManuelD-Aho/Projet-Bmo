@@ -23,8 +23,22 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>2.0.16</version>
+            <!-- La version est gérée par le parent, mais si vous avez une version spécifique ici, assurez-vous qu'elle est intentionnelle -->
+            <!-- Pour slf4j-api, le parent ne la gère pas dans dependencyManagement, donc la version ici est correcte si nécessaire -->
+            <version>2.0.16</version> <!-- Si gérée par le parent, cette ligne <version> peut être enlevée -->
             <scope>compile</scope>
+        </dependency>
+
+        <!-- Ajout des dépendances JUnit 5 pour les tests -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <!-- Version et scope hérités du dependencyManagement du parent -->
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <!-- Version et scope hérités du dependencyManagement du parent -->
         </dependency>
     </dependencies>
 </project>

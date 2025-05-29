@@ -1,73 +1,92 @@
+# Définition des services de l'application
 services:
+
+  # Service pour la base de données MySQL
   bmo-db:
     image: mysql:8.3
-    container_name: bmo_mysql_db
+    container_name: bmo_base_de_donnees_conteneur
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: MotDePasseRootFort! # Identifiant root pour MySQL
-      MYSQL_DATABASE: bmo_base_de_donnees
-      MYSQL_USER: bmo_utilisateur_app
-      MYSQL_PASSWORD: MotDePasseUtilisateurAppFort!
+      MYSQL_DATABASE: ${BMO_DB_NAME:-bmo_base_de_donnees}
+      MYSQL_USER: ${BMO_DB_USER:-bmo_utilisateur_app}
+      MYSQL_PASSWORD: ${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}
+      MYSQL_ROOT_PASSWORD: ${BMO_DB_ROOT_PASSWORD:-MotDePasseRootFort!}
     ports:
-      - "3306:3306"
+      - "${BMO_DB_PORT_HOST:-3307}:3306"
     volumes:
-      - bmo_db_volume:/var/lib/mysql
+      - bmo_donnees_mysql_volume:/var/lib/mysql
+      # Le chemin est relatif au contexte du docker-compose.yml (racine du projet)
+      - ./bmo-serveur/src/main/resources/sql/schema-initial.sql:/docker-entrypoint-initdb.d/10-schema-initial.sql
     networks:
-      - bmo_app_reseau
+      - bmo_reseau_interne
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u${BMO_DB_USER:-bmo_utilisateur_app}", "-p${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  phpmyadmin:
+  # Service pour l'application serveur BMO
+  bmo-serveur-app:
+    build:
+      # Contexte changé à la racine du projet
+      context: .
+      # Spécifier l'emplacement du Dockerfile relatif à ce nouveau contexte
+      dockerfile: bmo-serveur/Dockerfile
+    container_name: bmo_serveur_conteneur
+    restart: unless-stopped
+    depends_on:
+      bmo-db:
+        condition: service_healthy
+    ports:
+      - "${BMO_SERVER_PORT_HOST:-5000}:${BMO_SERVER_PORT_CONTAINER:-5000}"
+    environment:
+      BMO_DB_URL: jdbc:mysql://bmo-db:3306/${BMO_DB_NAME:-bmo_base_de_donnees}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      BMO_DB_UTILISATEUR: ${BMO_DB_USER:-bmo_utilisateur_app}
+      BMO_DB_MOTDEPASSE: ${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}
+      BMO_SERVEUR_PORT: ${BMO_SERVER_PORT_CONTAINER:-5000}
+      # JAVA_OPTS: "-Xmx512m -Xms256m"
+    networks:
+      - bmo_reseau_interne
+
+  # Service pour phpMyAdmin
+  bmo-phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
-    container_name: bmo_phpmyadmin
+    container_name: bmo_phpmyadmin_conteneur
     restart: unless-stopped
     depends_on:
       - bmo-db
     ports:
-      - "8081:80" # Port 8081 sur l'hôte pour éviter conflit
+      - "${BMO_PHPMYADMIN_PORT_HOST:-8081}:80"
     environment:
       PMA_HOST: bmo-db
       PMA_PORT: 3306
-      MYSQL_ROOT_PASSWORD: MotDePasseRootFort! # Accès root pour PhpMyAdmin
+      UPLOAD_LIMIT: 1G
     networks:
-      - bmo_app_reseau
+      - bmo_reseau_interne
 
-  bmo-serveur:
-    build:
-      context: .
-      dockerfile: Dockerfile.serveur
-    container_name: bmo_app_serveur
-    restart: unless-stopped
-    depends_on:
-      - bmo-db
-    ports:
-      - "5000:5000" # Port applicatif du serveur BMO
-    environment:
-      DB_URL: jdbc:mysql://bmo-db:3306/bmo_base_de_donnees?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      DB_USERNAME: bmo_utilisateur_app
-      DB_PASSWORD: MotDePasseUtilisateurAppFort!
-      # D'autres variables d'environnement pour la configuration du serveur peuvent être ajoutées ici
-      # Exemple : SERVER_LOG_LEVEL: INFO
-    networks:
-      - bmo_app_reseau
+  # Service pour l'application client BMO (Optionnel)
+  # bmo-client-app:
+  #   build:
+  #     context: . # Contexte à la racine aussi si vous construisez le client
+  #     dockerfile: bmo-client/Dockerfile
+  #   container_name: bmo_client_conteneur
+  #   restart: "no"
+  #   environment:
+  #     DISPLAY: ${DISPLAY}
+  #   volumes:
+  #     - /tmp/.X11-unix:/tmp/.X11-unix:rw
+  #   networks:
+  #     - bmo_reseau_interne
+  #   depends_on:
+  #      - bmo-serveur-app
 
-  bmo-client:
-    build:
-      context: .
-      dockerfile: Dockerfile.client
-    container_name: bmo_app_client
-    restart: "no" # Le client GUI n'a généralement pas besoin de redémarrer automatiquement
-    depends_on:
-      - bmo-serveur
-    environment:
-      - DISPLAY=${DISPLAY} # Nécessaire pour X11 forwarding
-
-    volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw # Montage du socket X11 pour l'affichage GUI
-    networks:
-      - bmo_app_reseau
-
+# Définition des réseaux personnalisés
 networks:
-  bmo_app_reseau:
+  bmo_reseau_interne:
     driver: bridge
 
+# Définition des volumes nommés
 volumes:
-  bmo_db_volume: # Volume pour la persistance des données MySQL
+  bmo_donnees_mysql_volume:
+    driver: local

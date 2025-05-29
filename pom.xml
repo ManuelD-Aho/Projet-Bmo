@@ -13,12 +13,13 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <!-- Supprimé maven.compiler.source et maven.compiler.target -->
         <java.version>17</java.version>
+        <maven.compiler.release>17</maven.compiler.release> <!-- Ajouté -->
         <javafx.version>17.0.10</javafx.version>
         <mysql.connector.version>8.0.33</mysql.connector.version>
         <org.json.version>20231013</org.json.version>
+        <slf4j.version>2.0.16</slf4j.version> <!-- Ajouté pour centraliser slf4j si vous le souhaitez -->
         <junit.jupiter.version>5.10.0</junit.jupiter.version>
         <maven.shade.plugin.version>3.5.1</maven.shade.plugin.version>
         <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
@@ -62,6 +63,12 @@
                 <artifactId>mysql-connector-java</artifactId>
                 <version>${mysql.connector.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+
 
             <!-- Dépendances JavaFX -->
             <dependency>
@@ -114,8 +121,8 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>${maven.compiler.plugin.version}</version>
                     <configuration>
-                        <source>${maven.compiler.source}</source>
-                        <target>${maven.compiler.target}</target>
+                        <!-- Utiliser <release> au lieu de source/target -->
+                        <release>${maven.compiler.release}</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
                     </configuration>
                 </plugin>

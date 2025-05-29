@@ -1,26 +1,31 @@
+# Étape 1 : Construction de l'application client avec Maven
+FROM maven:3.8.5-openjdk-17 AS constructeur_bmo_client
+
+WORKDIR /app_source_client
+COPY pom.xml .
+RUN mvn dependency:resolve
+COPY src ./src
+RUN mvn package -DskipTests
+
+# Étape 2 : Création de l'image d'exécution finale pour le client JavaFX
 FROM openjdk:17-jdk-slim
 
-ARG JAR_FILE=bmo-client/target/bmo-client-*.jar
+WORKDIR /app_client
 
-# Installation des dépendances graphiques pour JavaFX sur Debian/Ubuntu
-# Ces bibliothèques sont nécessaires pour l'affichage des interfaces graphiques.
-RUN apt-get update && apt-get install -y \
-    libgtk-3-0 \
-    libxtst6 \
-    libxrender1 \
-    libasound2 \
-    libgl1-mesa-glx \
-    libgl1-mesa-dri \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+# Copier le JAR exécutable du client
+COPY --from=constructeur_bmo_client /app_source_client/target/bmo-client-*.jar app-bmo-client.jar
 
-WORKDIR /opt/bmo
+# Dépendances pour les applications GUI sous Linux (exemple pour Debian/Ubuntu based)
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     libgtk-3-0 \
+#     libxrender1 \
+#     libxtst6 \
+#     libxi6 \
+#  && rm -rf /var/lib/apt/lists/*
 
-COPY ${JAR_FILE} app-client.jar
+# Commande pour démarrer l'application client
+CMD ["java", "-jar", "app-bmo-client.jar"]
 
-# Commande pour exécuter l'application cliente JavaFX
-ENTRYPOINT ["java", "-jar", "app-client.jar"]
-
-# Ce Dockerfile construit l'image pour le client JavaFX BMO.
-# Il installe les bibliothèques graphiques Linux nécessaires.
-# L'affichage nécessitera une configuration de X11 forwarding sur l'hôte.
+LABEL maintainer="ManuelD-Aho"
+LABEL version="1.0"
+LABEL description="Image Docker pour l'application client BMO (JavaFX)."
