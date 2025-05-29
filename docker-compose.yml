@@ -1,35 +1,32 @@
 services:
-  # Service pour la base de données MySQL
+  # --- Service Base de Données MySQL ---
   bmo-db:
     image: mysql:8.3
     container_name: bmo_base_de_donnees_conteneur
     restart: unless-stopped
+    ports:
+      - "${BMO_DB_PORT_HOST:-3307}:3306"
     environment:
       MYSQL_DATABASE: ${BMO_DB_NAME:-bmo_base_de_donnees}
       MYSQL_USER: ${BMO_DB_USER:-bmo_utilisateur_app}
       MYSQL_PASSWORD: ${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}
       MYSQL_ROOT_PASSWORD: ${BMO_DB_ROOT_PASSWORD:-MotDePasseRootFort!}
-    ports:
-      - "${BMO_DB_PORT_HOST:-3307}:3306"
     volumes:
       - bmo_donnees_mysql_volume:/var/lib/mysql
-      # Le chemin est relatif au contexte du docker-compose.yml (racine du projet)
       - ./bmo-serveur/src/main/resources/sql/schema-initial.sql:/docker-entrypoint-initdb.d/10-schema-initial.sql
     networks:
       - bmo_reseau_interne
     healthcheck:
       test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u${BMO_DB_USER:-bmo_utilisateur_app}", "-p${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}"]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
-  # Service pour l'application serveur BMO
+  # --- Service Application Serveur BMO ---
   bmo-serveur-app:
     build:
-      # Contexte changé à la racine du projet
       context: .
-      # Spécifier l'emplacement du Dockerfile relatif à ce nouveau contexte
       dockerfile: bmo-serveur/Dockerfile
     container_name: bmo_serveur_conteneur
     restart: unless-stopped
@@ -39,15 +36,14 @@ services:
     ports:
       - "${BMO_SERVER_PORT_HOST:-5000}:${BMO_SERVER_PORT_CONTAINER:-5000}"
     environment:
-      BMO_DB_URL: jdbc:mysql://bmo-db:3306/${BMO_DB_NAME:-bmo_base_de_donnees}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      BMO_DB_URL: jdbc:mysql://bmo-db:3306/${BMO_DB_NAME:-bmo_base_de_donnees}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&autoReconnect=true
       BMO_DB_UTILISATEUR: ${BMO_DB_USER:-bmo_utilisateur_app}
       BMO_DB_MOTDEPASSE: ${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}
       BMO_SERVEUR_PORT: ${BMO_SERVER_PORT_CONTAINER:-5000}
-      # JAVA_OPTS: "-Xmx512m -Xms256m"
     networks:
       - bmo_reseau_interne
 
-  # Service pour phpMyAdmin
+  # --- Service PhpMyAdmin ---
   bmo-phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     container_name: bmo_phpmyadmin_conteneur
@@ -59,35 +55,34 @@ services:
     environment:
       PMA_HOST: bmo-db
       PMA_PORT: 3306
-      # Configuration pour la connexion automatique avec l'utilisateur de l'application BMO
-      # phpMyAdmin utilisera la méthode d'authentification 'config' avec ces identifiants.
-      PMA_USER: ${BMO_DB_USER:-bmo_utilisateur_app}
-      PMA_PASSWORD: ${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}
+      MYSQL_ROOT_PASSWORD: ${BMO_DB_ROOT_PASSWORD:-MotDePasseRootFort!}
+      UPLOAD_LIMIT: 1G
     networks:
       - bmo_reseau_interne
 
-  # Service pour l'application client BMO (Optionnel - décommentez si besoin)
-  # bmo-client-app:
-  #   build:
-  #     context: .
-  #     dockerfile: bmo-client/Dockerfile
-  #   container_name: bmo_client_conteneur
-  #   restart: "no"
-  #   environment:
-  #     DISPLAY: ${DISPLAY} # Nécessaire pour les applications GUI sous Linux
-  #   volumes:
-  #     - /tmp/.X11-unix:/tmp/.X11-unix:rw # Montage du socket X11 (Linux)
-  #   networks:
-  #     - bmo_reseau_interne
-  #   depends_on:
-  #      - bmo-serveur-app
+  # --- Service Application Client BMO (JavaFX) ---
+  bmo-client-app:
+    build:
+      context: ./bmo-client  # <--- CONTEXTE MODIFIÉ ICI
+      dockerfile: bmo-client/Dockerfile    # <--- Dockerfile est maintenant à la racine de ce nouveau contexte (bmo-client/Dockerfile)
+    container_name: bmo_client_conteneur
+    restart: "no"
+    depends_on:
+      - bmo-serveur-app
+    environment:
+      - DISPLAY=${DISPLAY}
+      - BMO_SERVER_ADDRESS=bmo-serveur-app
+      - BMO_SERVER_PORT=${BMO_SERVER_PORT_CONTAINER:-5000}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    networks:
+      - bmo_reseau_interne
 
-# Définition des réseaux personnalisés
 networks:
   bmo_reseau_interne:
     driver: bridge
+    name: bmo_reseau_global
 
-# Définition des volumes nommés (pour la persistance des données)
 volumes:
   bmo_donnees_mysql_volume:
     driver: local
