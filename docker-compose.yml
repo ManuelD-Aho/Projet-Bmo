@@ -1,22 +1,22 @@
 services:
   bmo-db:
     image: mysql:8.3
-    container_name: bmo_base_de_donnees_conteneur
+    container_name: bmo_db_conteneur
     restart: unless-stopped
     ports:
       - "${BMO_DB_PORT_HOST:-3307}:3306"
     environment:
-      MYSQL_DATABASE: ${BMO_DB_NAME:-bmo_base_de_donnees}
-      MYSQL_USER: ${BMO_DB_USER:-bmo_utilisateur_app}
-      MYSQL_PASSWORD: ${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}
-      MYSQL_ROOT_PASSWORD: ${BMO_DB_ROOT_PASSWORD:-MotDePasseRootFort!}
+      MYSQL_DATABASE: ${BMO_DB_NAME}
+      MYSQL_USER: ${BMO_DB_USER}
+      MYSQL_PASSWORD: ${BMO_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${BMO_DB_ROOT_PASSWORD}
     volumes:
       - bmo_donnees_mysql_volume:/var/lib/mysql
       - ./bmo-serveur/src/main/resources/sql/schema-initial.sql:/docker-entrypoint-initdb.d/10-schema-initial.sql
     networks:
       - bmo_reseau_interne
     healthcheck:
-      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u${BMO_DB_USER:-bmo_utilisateur_app}", "-p${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}"]
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u${BMO_DB_USER}", "-p${BMO_DB_PASSWORD}"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -34,9 +34,9 @@ services:
     ports:
       - "${BMO_SERVER_PORT_HOST:-5000}:${BMO_SERVER_PORT_CONTAINER:-5000}"
     environment:
-      BMO_DB_URL: jdbc:mysql://bmo-db:3306/${BMO_DB_NAME:-bmo_base_de_donnees}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&autoReconnect=true
-      BMO_DB_UTILISATEUR: ${BMO_DB_USER:-bmo_utilisateur_app}
-      BMO_DB_MOTDEPASSE: ${BMO_DB_PASSWORD:-MotDePasseUtilisateurAppFort!}
+      BMO_DB_URL: jdbc:mysql://bmo-db:3306/${BMO_DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&autoReconnect=true
+      BMO_DB_UTILISATEUR: ${BMO_DB_USER}
+      BMO_DB_MOTDEPASSE: ${BMO_DB_PASSWORD}
       BMO_SERVEUR_PORT: ${BMO_SERVER_PORT_CONTAINER:-5000}
     networks:
       - bmo_reseau_interne
@@ -52,15 +52,15 @@ services:
     environment:
       PMA_HOST: bmo-db
       PMA_PORT: 3306
-      MYSQL_ROOT_PASSWORD: ${BMO_DB_ROOT_PASSWORD:-MotDePasseRootFort!}
+      MYSQL_ROOT_PASSWORD: ${BMO_DB_ROOT_PASSWORD}
       UPLOAD_LIMIT: 1G
     networks:
       - bmo_reseau_interne
 
   bmo-client-app:
     build:
-      context: . # MODIFIÉ: Le contexte est maintenant la racine du projet
-      dockerfile: bmo-client/Dockerfile # MODIFIÉ: Chemin relatif à la racine du projet
+      context: .
+      dockerfile: bmo-client/Dockerfile
     container_name: bmo_client_conteneur
     restart: "no"
     depends_on:
@@ -69,6 +69,7 @@ services:
       - DISPLAY=${DISPLAY}
       - BMO_SERVER_ADDRESS=bmo-serveur-app
       - BMO_SERVER_PORT=${BMO_SERVER_PORT_CONTAINER:-5000}
+      - _JAVA_OPTIONS=-Dprism.lcdtext=false -Dprism.text=lcd
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     networks:

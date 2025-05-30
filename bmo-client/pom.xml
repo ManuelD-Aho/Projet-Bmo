@@ -17,10 +17,11 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
-        <javafx.version>17.0.10</javafx.version>
+        <!-- Redéfinir ou hériter la version de JavaFX -->
+        <javafx.version>21.0.2</javafx.version>
         <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
-        <json.version>20231013</json.version>
-        <slf4j.version>2.0.13</slf4j.version> <!-- Propriété pour la version de SLF4J -->
+        <json.version>20231013</json.version> <!-- Assurez-vous que c'est la version que vous voulez -->
+        <slf4j.version>2.0.13</slf4j.version> <!-- Assurez-vous que c'est la version que vous voulez -->
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
         <maven-shade-plugin.version>3.5.1</maven-shade-plugin.version>
     </properties>
@@ -32,7 +33,6 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Dépendances JavaFX -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -47,19 +47,22 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
-            <classifier>linux</classifier>
+            <!-- Les classifiers ne sont généralement pas nécessaires si vous construisez pour une plateforme cible unique (comme Linux dans Docker) -->
+            <!-- ou si vous utilisez jpackage/jlink pour des bundles multiplateformes. -->
+            <!-- Pour le build Docker Linux, vous pouvez omettre les classifiers ou ne garder que 'linux'. -->
+            <!-- <classifier>linux</classifier> -->
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
-            <artifactId>javafx-graphics</artifactId>
+            <artifactId>javafx-media</artifactId>
             <version>${javafx.version}</version>
-            <classifier>mac</classifier>
+            <!-- <classifier>linux</classifier> -->
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
-            <artifactId>javafx-graphics</artifactId>
+            <artifactId>javafx-base</artifactId>
             <version>${javafx.version}</version>
-            <classifier>win</classifier>
+            <!-- <classifier>linux</classifier> -->
         </dependency>
 
         <dependency>
@@ -68,12 +71,11 @@
             <version>${json.version}</version>
         </dependency>
 
-        <!-- Ajout de l'implémentation SLF4J Simple -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
             <version>${slf4j.version}</version>
-            <scope>runtime</scope> <!-- Typiquement runtime ou test, runtime est bien pour voir les logs en exécution -->
+            <scope>runtime</scope>
         </dependency>
     </dependencies>
 
