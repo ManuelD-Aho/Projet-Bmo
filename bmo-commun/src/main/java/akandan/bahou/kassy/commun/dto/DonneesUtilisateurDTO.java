@@ -2,34 +2,39 @@ package akandan.bahou.kassy.commun.dto;
 
 import akandan.bahou.kassy.commun.modele.RoleUtilisateur;
 import akandan.bahou.kassy.commun.modele.StatutCompteUtilisateur;
+import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import org.json.JSONObject;
 import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
 
 public class DonneesUtilisateurDTO implements Serializable {
     private static final long serialVersionUID = 1L;
+    private static final Logger journal = EnregistreurEvenementsBMO.getLogger(DonneesUtilisateurDTO.class);
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private long idUtilisateur;
-    private String identifiant;
     private String nomComplet;
+    private String identifiant;
     private RoleUtilisateur role;
     private StatutCompteUtilisateur statutCompte;
     private LocalDateTime dateCreationCompte;
     private LocalDateTime dateDerniereConnexion;
+    private String motDePasse; // Principalement pour la création/modification, ne devrait pas être sérialisé vers le client en général
 
     public DonneesUtilisateurDTO() {
     }
 
-    public DonneesUtilisateurDTO(long idUtilisateur, String identifiant, String nomComplet, RoleUtilisateur role, StatutCompteUtilisateur statutCompte, LocalDateTime dateCreationCompte, LocalDateTime dateDerniereConnexion) {
+    public DonneesUtilisateurDTO(long idUtilisateur, String nomComplet, String identifiant, RoleUtilisateur role, StatutCompteUtilisateur statutCompte, LocalDateTime dateCreation, LocalDateTime dateDerniereConnexion) {
         this.idUtilisateur = idUtilisateur;
-        this.identifiant = identifiant;
         this.nomComplet = nomComplet;
+        this.identifiant = identifiant;
         this.role = role;
         this.statutCompte = statutCompte;
-        this.dateCreationCompte = dateCreationCompte;
+        this.dateCreationCompte = dateCreation;
         this.dateDerniereConnexion = dateDerniereConnexion;
     }
 
@@ -41,20 +46,20 @@ public class DonneesUtilisateurDTO implements Serializable {
         this.idUtilisateur = idUtilisateur;
     }
 
-    public String getIdentifiant() {
-        return identifiant;
-    }
-
-    public void setIdentifiant(String identifiant) {
-        this.identifiant = identifiant;
-    }
-
     public String getNomComplet() {
         return nomComplet;
     }
 
     public void setNomComplet(String nomComplet) {
         this.nomComplet = nomComplet;
+    }
+
+    public String getIdentifiant() {
+        return identifiant;
+    }
+
+    public void setIdentifiant(String identifiant) {
+        this.identifiant = identifiant;
     }
 
     public RoleUtilisateur getRole() {
@@ -89,86 +94,48 @@ public class DonneesUtilisateurDTO implements Serializable {
         this.dateDerniereConnexion = dateDerniereConnexion;
     }
 
+    public String getMotDePasse() {
+        return motDePasse;
+    }
+
+    public void setMotDePasse(String motDePasse) {
+        this.motDePasse = motDePasse;
+    }
+
     public String toJsonString() throws JSONException {
-        JSONObject jsonObject = new JSONObject();
-        jsonObject.put("idUtilisateur", this.idUtilisateur);
-        jsonObject.put("identifiant", this.identifiant);
-        jsonObject.put("nomComplet", this.nomComplet);
-        if (this.role != null) {
-            jsonObject.put("role", this.role.name());
-        }
-        if (this.statutCompte != null) {
-            jsonObject.put("statutCompte", this.statutCompte.name());
-        }
-        if (this.dateCreationCompte != null) {
-            jsonObject.put("dateCreationCompte", this.dateCreationCompte.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        }
-        if (this.dateDerniereConnexion != null) {
-            jsonObject.put("dateDerniereConnexion", this.dateDerniereConnexion.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        }
-        return jsonObject.toString();
+        JSONObject json = new JSONObject();
+        json.put("idUtilisateur", idUtilisateur);
+        json.put("nomComplet", nomComplet);
+        json.put("identifiant", identifiant);
+        if (role != null) json.put("role", role.name());
+        if (statutCompte != null) json.put("statutCompte", statutCompte.name());
+        if (dateCreationCompte != null) json.put("dateCreationCompte", dateCreationCompte.format(FORMATTER));
+        if (dateDerniereConnexion != null) json.put("dateDerniereConnexion", dateDerniereConnexion.format(FORMATTER));
+        return json.toString();
     }
 
     public static DonneesUtilisateurDTO fromJson(String jsonString) throws JSONException {
-        if (jsonString == null || jsonString.trim().isEmpty()) {
-            // Consider logging a warning or throwing an IllegalArgumentException
-            // For now, returning null as per one interpretation of "gérer"
-            return null;
-        }
-        JSONObject jsonObject = new JSONObject(jsonString);
+        JSONObject json = new JSONObject(jsonString);
         DonneesUtilisateurDTO dto = new DonneesUtilisateurDTO();
-
-        dto.setIdUtilisateur(jsonObject.optLong("idUtilisateur"));
-        dto.setIdentifiant(jsonObject.optString("identifiant", null));
-        dto.setNomComplet(jsonObject.optString("nomComplet", null));
-
-        if (jsonObject.has("role") && !jsonObject.isNull("role")) {
+        dto.setIdUtilisateur(json.optLong("idUtilisateur"));
+        dto.setNomComplet(json.optString("nomComplet", null));
+        dto.setIdentifiant(json.optString("identifiant", null));
+        if (json.has("role")) dto.setRole(RoleUtilisateur.valueOf(json.getString("role")));
+        if (json.has("statutCompte")) dto.setStatutCompte(StatutCompteUtilisateur.valueOf(json.getString("statutCompte")));
+        if (json.has("dateCreationCompte")) {
             try {
-                dto.setRole(RoleUtilisateur.valueOf(jsonObject.getString("role")));
-            } catch (IllegalArgumentException e) {
-                // Log l'erreur ou assigne une valeur par défaut si nécessaire
-                // e.g., EnregistreurEvenementsBMO.getLogger(DonneesUtilisateurDTO.class).warn("Rôle invalide dans JSON : {}", jsonObject.getString("role"));
-            }
-        }
-        if (jsonObject.has("statutCompte") && !jsonObject.isNull("statutCompte")) {
-            try {
-                dto.setStatutCompte(StatutCompteUtilisateur.valueOf(jsonObject.getString("statutCompte")));
-            } catch (IllegalArgumentException e) {
-                // Log l'erreur
-            }
-        }
-        if (jsonObject.has("dateCreationCompte") && !jsonObject.isNull("dateCreationCompte")) {
-            try {
-                dto.setDateCreationCompte(LocalDateTime.parse(jsonObject.getString("dateCreationCompte"), DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                dto.setDateCreationCompte(LocalDateTime.parse(json.getString("dateCreationCompte"), FORMATTER));
             } catch (DateTimeParseException e) {
-                // Log l'erreur
+                journal.warn("Format de dateCreationCompte invalide dans JSON: {}", json.getString("dateCreationCompte"));
             }
         }
-        if (jsonObject.has("dateDerniereConnexion") && !jsonObject.isNull("dateDerniereConnexion")) {
+        if (json.has("dateDerniereConnexion")) {
             try {
-                dto.setDateDerniereConnexion(LocalDateTime.parse(jsonObject.getString("dateDerniereConnexion"), DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                dto.setDateDerniereConnexion(LocalDateTime.parse(json.getString("dateDerniereConnexion"), FORMATTER));
             } catch (DateTimeParseException e) {
-                // Log l'erreur
+                journal.warn("Format de dateDerniereConnexion invalide dans JSON: {}", json.getString("dateDerniereConnexion"));
             }
         }
         return dto;
-    }
-
-    @Override
-    public String toString() {
-        try {
-            return toJsonString();
-        } catch (JSONException e) {
-            return "DonneesUtilisateurDTO{" +
-                    "idUtilisateur=" + idUtilisateur +
-                    ", identifiant='" + identifiant + '\'' +
-                    ", nomComplet='" + nomComplet + '\'' +
-                    ", role=" + role +
-                    ", statutCompte=" + statutCompte +
-                    ", dateCreationCompte=" + dateCreationCompte +
-                    ", dateDerniereConnexion=" + dateDerniereConnexion +
-                    ", (Erreur JSON: " + e.getMessage() + ")" +
-                    '}';
-        }
     }
 }

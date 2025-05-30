@@ -4,17 +4,16 @@ import akandan.bahou.kassy.client.coeur.GestionnaireNavigation;
 import akandan.bahou.kassy.client.service.ServiceCommunicationServeur;
 import akandan.bahou.kassy.client.service.ServiceSessionUtilisateur;
 import akandan.bahou.kassy.client.util.AlertesUtilisateur;
-// ValidateurInterfaceGraphique n'est pas utilisé pour l'instant
 import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
 import akandan.bahou.kassy.commun.modele.TypeReunion;
 import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
-import akandan.bahou.kassy.commun.util.ExceptionValidation; // Pour ExceptionValidation
+import akandan.bahou.kassy.commun.util.ExceptionValidation;
 import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List; // Ajout de l'import
+import java.util.List;
 import java.util.ResourceBundle;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -66,7 +65,7 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
     public void initialiserDonneesEtServices(GestionnaireNavigation gestionnaireNav, ServiceCommunicationServeur serviceComm, ServiceSessionUtilisateur serviceSess, ResourceBundle paquetRessources, Object... donnees) {
         this.gestionnaireNavigation = gestionnaireNav;
         this.serviceCommunicationServeur = serviceComm;
-        this.serviceSessionUtilisateur = serviceSess; // Conservé même si non utilisé directement pour l'instant
+        this.serviceSessionUtilisateur = serviceSess;
         this.paquetRessourcesI18n = paquetRessources;
 
         if (donnees != null && donnees.length > 0 && donnees[0] instanceof DetailsReunionDTO) {
@@ -75,15 +74,10 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
             this.reunionEnCoursModification = null;
         }
 
-        // Listener pour la confirmation de création/modification de réunion
-        // detailsReunionActuelleProperty est plus générique, on peut l'utiliser
         serviceComm.detailsReunionActuelleProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null) {
-                // Déterminer si c'est la confirmation pour CETTE opération
                 boolean estCreation = (reunionEnCoursModification == null);
                 boolean idCorrespondSiModif = (!estCreation && newVal.getIdReunion() == reunionEnCoursModification.getIdReunion());
-
-                // Pour une création, on pourrait comparer le titre si l'ID n'est pas encore connu localement
                 boolean titreCorrespondSiCreation = (estCreation && newVal.getTitre().equals(champTitreReunion.getText()));
 
                 if (titreCorrespondSiCreation || idCorrespondSiModif) {
@@ -142,15 +136,15 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
             etiquetteTitreFenetre.setText(paquetRessourcesI18n.getString("meeting.edit.title"));
             boutonSauvegarderReunion.setText(paquetRessourcesI18n.getString("button.save.changes"));
             champTitreReunion.setText(reunionEnCoursModification.getTitre());
-            champDescriptionReunion.setText(reunionEnCoursModification.getDescription()); // Utilisation de getDescription
-            if (reunionEnCoursModification.getDateHeureDebut() != null) { // DTO utilise LocalDateTime directement
+            champDescriptionReunion.setText(reunionEnCoursModification.getDescription());
+            if (reunionEnCoursModification.getDateHeureDebut() != null) {
                 datePickerDateDebut.setValue(reunionEnCoursModification.getDateHeureDebut().toLocalDate());
                 comboBoxHeureDebut.setValue(reunionEnCoursModification.getDateHeureDebut().toLocalTime());
             } else {
                 datePickerDateDebut.setValue(LocalDate.now().plusDays(1));
                 comboBoxHeureDebut.setValue(LocalTime.of(9,0));
             }
-            spinnerDureeMinutes.getValueFactory().setValue(reunionEnCoursModification.getDureeEstimeeMinutes()); // Utilisation de getDureeEstimeeMinutes
+            spinnerDureeMinutes.getValueFactory().setValue(reunionEnCoursModification.getDureeEstimeeMinutes());
             comboBoxTypeReunion.setValue(reunionEnCoursModification.getTypeReunion());
             if (reunionEnCoursModification.getTypeReunion() == TypeReunion.PRIVEE) {
                 champMotDePasseReunion.setText(reunionEnCoursModification.getMotDePasseOptionnelValeur());
@@ -206,9 +200,9 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
 
             DetailsReunionDTO dto = new DetailsReunionDTO();
             dto.setTitre(titre);
-            dto.setDescription(description); // Utiliser setDescription
-            dto.setDateHeureDebut(dateHeureDebutComplete); // Passer LocalDateTime
-            dto.setDureeEstimeeMinutes(duree); // Utiliser setDureeEstimeeMinutes
+            dto.setDescription(description);
+            dto.setDateHeureDebut(dateHeureDebutComplete);
+            dto.setDureeEstimeeMinutes(duree);
             dto.setTypeReunion(type);
             if (type == TypeReunion.PRIVEE) {
                 dto.setMotDePasseOptionnelValeur(motDePasse);
@@ -220,12 +214,11 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
                 dto.setIdReunion(reunionEnCoursModification.getIdReunion());
                 dto.setStatutReunion(reunionEnCoursModification.getStatutReunion());
                 dto.setIdOrganisateur(reunionEnCoursModification.getIdOrganisateur());
-                dto.setDateCreationReunion(reunionEnCoursModification.getDateCreationReunion()); // Conserver la date de création originale
+                dto.setDateCreationReunion(reunionEnCoursModification.getDateCreationReunion());
                 serviceCommunicationServeur.envoyerRequeteModificationReunion(dto);
                 journal.info("Tentative de modification de la réunion : {}", titre);
             } else {
-                dto.setDateCreationReunion(LocalDateTime.now()); // Pour une nouvelle réunion
-                // idOrganisateur sera géré par le serveur
+                dto.setDateCreationReunion(LocalDateTime.now());
                 serviceCommunicationServeur.envoyerRequeteCreationReunion(dto);
                 journal.info("Tentative de création de la réunion : {}", titre);
             }

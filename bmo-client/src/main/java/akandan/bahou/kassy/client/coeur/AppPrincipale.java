@@ -39,16 +39,34 @@ public class AppPrincipale extends Application {
             } catch (MissingResourceException mre) {
                 journal.error("Fichier de ressources i18n introuvable.", mre);
                 Platform.runLater(() -> AlertesUtilisateur.afficherErreur("Critical Error", "Localization files not found. Application will exit."));
-                Platform.exit(); // Force l'arrêt si i18n est crucial
+                Platform.exit();
                 return;
             }
 
             this.serviceSessionUtilisateur = new ServiceSessionUtilisateur();
             this.serviceCommunicationServeur = new ServiceCommunicationServeur(this.serviceSessionUtilisateur, this.paquetRessourcesI18n);
 
-            boolean connecte = this.serviceCommunicationServeur.connecterAuServeur("localhost", 5000);
+            String serverAddress = System.getenv("BMO_SERVER_ADDRESS");
+            String serverPortStr = System.getenv("BMO_SERVER_PORT");
+
+            if (serverAddress == null || serverAddress.trim().isEmpty()) {
+                serverAddress = "localhost";
+                journal.warn("Variable d'environnement BMO_SERVER_ADDRESS non définie. Utilisation de la valeur par défaut: {}", serverAddress);
+            }
+            int serverPort = 5000;
+            if (serverPortStr != null && !serverPortStr.trim().isEmpty()) {
+                try {
+                    serverPort = Integer.parseInt(serverPortStr);
+                } catch (NumberFormatException e) {
+                    journal.error("Variable d'environnement BMO_SERVER_PORT invalide: {}. Utilisation de la valeur par défaut: {}", serverPortStr, serverPort, e);
+                }
+            } else {
+                journal.warn("Variable d'environnement BMO_SERVER_PORT non définie. Utilisation de la valeur par défaut: {}", serverPort);
+            }
+
+            boolean connecte = this.serviceCommunicationServeur.connecterAuServeur(serverAddress, serverPort);
             if (!connecte) {
-                journal.warn("La connexion initiale au serveur (localhost:5000) a échoué.");
+                journal.warn("La connexion initiale au serveur ({}:{}) a échoué.", serverAddress, serverPort);
             }
             journal.info("Services client initialisés.");
 
@@ -94,7 +112,7 @@ public class AppPrincipale extends Application {
 
             if (this.controleurFenetrePrincipale != null) {
                 this.controleurFenetrePrincipale.initialiserDonneesEtServices(this.gestionnaireNavigation, this.serviceCommunicationServeur, this.serviceSessionUtilisateur, this.paquetRessourcesI18n);
-                this.gestionnaireNavigation.setControleurFenetrePrincipale(this.controleurFenetrePrincipale); // Donner une référence au gestionnaire
+                this.gestionnaireNavigation.setControleurFenetrePrincipale(this.controleurFenetrePrincipale);
             } else {
                 journal.error("Le contrôleur de la fenêtre principale n'a pas pu être chargé.");
                 AlertesUtilisateur.afficherErreur("Erreur Critique", "Impossible de charger le cadre principal.");
@@ -111,7 +129,7 @@ public class AppPrincipale extends Application {
             }
             this.stagePrincipal.setScene(scenePrincipale);
 
-            this.gestionnaireNavigation.afficherVueConnexion(); // Charge la vue de connexion dans le cadre principal
+            this.gestionnaireNavigation.afficherVueConnexion();
 
             this.stagePrincipal.setOnCloseRequest(event -> {
                 journal.info("Demande de fermeture de l'application reçue.");
