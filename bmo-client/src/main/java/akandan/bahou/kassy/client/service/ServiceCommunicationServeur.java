@@ -4,6 +4,8 @@ import akandan.bahou.kassy.client.util.AlertesUtilisateur;
 import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
 import akandan.bahou.kassy.commun.dto.DonneesUtilisateurDTO;
 import akandan.bahou.kassy.commun.dto.MessageChatDTO;
+import akandan.bahou.kassy.commun.modele.RoleUtilisateur;
+import akandan.bahou.kassy.commun.modele.StatutCompteUtilisateur;
 import akandan.bahou.kassy.commun.protocole.TypeReponseServeur;
 import akandan.bahou.kassy.commun.protocole.TypeRequeteClient;
 import akandan.bahou.kassy.commun.util.ConstantesProtocoleBMO;
@@ -52,17 +54,18 @@ public class ServiceCommunicationServeur {
     private final StringProperty dernierMessageErreurAuth = new SimpleStringProperty();
     private final ObjectProperty<MessageChatDTO> dernierMessageChatRecu = new SimpleObjectProperty<>();
     private final ListProperty<MessageChatDTO> historiqueMessagesReunion = new SimpleListProperty<>(FXCollections.observableArrayList());
-    private final ObjectProperty<DetailsReunionDTO> detailsReunionActuelle = new SimpleObjectProperty<>();
+    private final ObjectProperty<DetailsReunionDTO> detailsReunionActuelle = new SimpleObjectProperty<>(); // Pour la réunion rejointe/détaillée/MAJ
     private final ListProperty<DetailsReunionDTO> listeToutesReunions = new SimpleListProperty<>(FXCollections.observableArrayList());
     private final ListProperty<DetailsReunionDTO> listeMesReunions = new SimpleListProperty<>(FXCollections.observableArrayList());
     private final ObjectProperty<DonneesUtilisateurDTO> profilUtilisateurActuel = new SimpleObjectProperty<>();
     private final ListProperty<DonneesUtilisateurDTO> listeGlobaleUtilisateurs = new SimpleListProperty<>(FXCollections.observableArrayList());
     private final BooleanProperty etatConnexionServeur = new SimpleBooleanProperty(false);
-    private final ObjectProperty<DonneesUtilisateurDTO> notificationUtilisateurRejoint = new SimpleObjectProperty<>();
-    private final ObjectProperty<DonneesUtilisateurDTO> notificationUtilisateurQuitte = new SimpleObjectProperty<>();
+    private final ObjectProperty<JSONObject> notificationUtilisateurRejoint = new SimpleObjectProperty<>(); // Contient idReunion et DonneesUtilisateurDTO
+    private final ObjectProperty<JSONObject> notificationUtilisateurQuitte = new SimpleObjectProperty<>(); // Contient idReunion et DonneesUtilisateurDTO
     private final ObjectProperty<DetailsReunionDTO> notificationReunionMiseAJour = new SimpleObjectProperty<>();
-    private final IntegerProperty notificationReunionClotureeId = new SimpleIntegerProperty(0);
+    private final IntegerProperty notificationReunionClotureeId = new SimpleIntegerProperty(0); // ID de la réunion clôturée
     private final ObjectProperty<DonneesUtilisateurDTO> utilisateurMisAJourParAdmin = new SimpleObjectProperty<>();
+
 
     public ServiceCommunicationServeur(ServiceSessionUtilisateur serviceSession, ResourceBundle paquetRessources) {
         this.serviceSessionUtilisateur = serviceSession;
@@ -118,7 +121,7 @@ public class ServiceCommunicationServeur {
             serviceEcouteServeur.shutdown();
             try {
                 if (!serviceEcouteServeur.awaitTermination(1, TimeUnit.SECONDS)) {
-                    serviceEcouteServeur.shutdownNow(); // Tente d'arrêter plus agressivement
+                    serviceEcouteServeur.shutdownNow();
                 }
             } catch (InterruptedException e) {
                 serviceEcouteServeur.shutdownNow();
@@ -126,7 +129,7 @@ public class ServiceCommunicationServeur {
                 journal.warn("Thread d'écoute interrompu pendant l'attente de terminaison lors de la déconnexion.");
             }
         }
-        initialiserServiceEcoute(); // Prépare pour une reconnexion future
+        initialiserServiceEcoute();
 
         try {
             if (fluxSortie != null) fluxSortie.close();
@@ -161,7 +164,7 @@ public class ServiceCommunicationServeur {
                     paquetRessourcesI18n.getString("error.send.message.title"),
                     paquetRessourcesI18n.getString("error.send.message.notconnected.content")
             ));
-            if (estActuellementConnecte()) { // Si l'état est incohérent
+            if (estActuellementConnecte()) {
                 deconnecterDuServeur();
             }
         }
@@ -175,7 +178,6 @@ public class ServiceCommunicationServeur {
     private void envoyerRequeteSimple(TypeRequeteClient typeRequete) {
         envoyerRequeteAvecPayloadJson(typeRequete, null);
     }
-
 
     private void lancerEcouteServeur() {
         if (serviceEcouteServeur.isShutdown() || serviceEcouteServeur.isTerminated()) {
@@ -192,7 +194,7 @@ public class ServiceCommunicationServeur {
             } catch (SocketException e) {
                 if (doitEcouter) {
                     journal.error("SocketException (serveur potentiellement arrêté ou connexion perdue): {}. Déconnexion.", e.getMessage());
-                    deconnecterDuServeur(); // Assure une déconnexion propre côté client
+                    deconnecterDuServeur();
                     Platform.runLater(() -> AlertesUtilisateur.afficherErreur(
                             paquetRessourcesI18n.getString("error.connection.lost.title"),
                             paquetRessourcesI18n.getString("error.connection.lost.content.socket")
@@ -211,23 +213,17 @@ public class ServiceCommunicationServeur {
                 }
             } finally {
                 journal.info("Thread d'écoute serveur terminé.");
-                if (doitEcouter) { // Si la boucle s'est terminée mais qu'on est censé écouter
-                    deconnecterDuServeur(); // Assure que l'état est mis à jour
+                if (doitEcouter) {
+                    deconnecterDuServeur();
                 }
             }
         });
     }
 
     private void traiterReponseServeur(String reponseBrute) {
-        if (reponseBrute == null || reponseBrute.trim().isEmpty()) {
-            journal.warn("Réponse vide reçue du serveur.");
-            return;
-        }
+        if (reponseBrute == null || reponseBrute.trim().isEmpty()) return;
         String[] tokens = reponseBrute.split(ConstantesProtocoleBMO.DELIMITEUR_COMMANDE, 2);
-        if (tokens.length == 0) {
-            journal.warn("Réponse malformée reçue du serveur (pas de tokens).");
-            return;
-        }
+        if (tokens.length == 0) return;
 
         TypeReponseServeur typeReponse;
         try {
@@ -243,13 +239,8 @@ public class ServiceCommunicationServeur {
             try {
                 switch (typeReponse) {
                     case AUTH_OK:
-                        if (donneesJsonString != null) {
-                            serviceSessionUtilisateur.definirSession(DonneesUtilisateurDTO.fromJson(donneesJsonString));
-                            dernierMessageErreurAuth.set("");
-                        } else {
-                            journal.error("Données manquantes pour AUTH_OK");
-                            dernierMessageErreurAuth.set(paquetRessourcesI18n.getString("error.auth.generic"));
-                        }
+                        if (donneesJsonString != null) serviceSessionUtilisateur.definirSession(DonneesUtilisateurDTO.fromJson(donneesJsonString));
+                        dernierMessageErreurAuth.set("");
                         break;
                     case AUTH_ECHEC:
                         dernierMessageErreurAuth.set(donneesJsonString != null ? donneesJsonString : paquetRessourcesI18n.getString("error.auth.generic"));
@@ -262,94 +253,72 @@ public class ServiceCommunicationServeur {
                         dernierMessageErreurAuth.set(donneesJsonString != null ? donneesJsonString : paquetRessourcesI18n.getString("error.signup.generic"));
                         break;
                     case LISTE_REUNIONS:
-                    case LISTE_MES_REUNIONS: // Les deux mettent à jour des listes différentes ou la même
+                    case LISTE_MES_REUNIONS:
                         if (donneesJsonString != null) {
                             JSONArray reunionsJson = new JSONArray(donneesJsonString);
                             List<DetailsReunionDTO> reunions = new ArrayList<>();
-                            for (int i = 0; i < reunionsJson.length(); i++) {
-                                reunions.add(DetailsReunionDTO.fromJson(reunionsJson.getJSONObject(i).toString()));
-                            }
-                            if (typeReponse == TypeReponseServeur.LISTE_REUNIONS) {
-                                listeToutesReunions.setAll(reunions);
-                            } else {
-                                listeMesReunions.setAll(reunions);
-                            }
+                            for (int i = 0; i < reunionsJson.length(); i++) reunions.add(DetailsReunionDTO.fromJson(reunionsJson.getJSONObject(i).toString()));
+                            if (typeReponse == TypeReponseServeur.LISTE_REUNIONS) listeToutesReunions.setAll(reunions);
+                            else listeMesReunions.setAll(reunions);
                         }
                         break;
                     case DETAILS_REUNION:
                     case REUNION_CREEE:
-                    case REUNION_OUVERTE: // Le serveur peut renvoyer les détails mis à jour
-                        if (donneesJsonString != null) {
-                            detailsReunionActuelle.set(DetailsReunionDTO.fromJson(donneesJsonString));
-                            if(typeReponse == TypeReponseServeur.REUNION_CREEE){
-                                AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("meeting.creation.success.title"), paquetRessourcesI18n.getString("meeting.creation.success.content"));
-                            }
-                        }
+                    case REUNION_OUVERTE:
+                    case REUNION_MODIFIEE: // Ajout pour gérer la réponse du serveur à une modification
+                        if (donneesJsonString != null) detailsReunionActuelle.set(DetailsReunionDTO.fromJson(donneesJsonString));
+                        if(typeReponse == TypeReponseServeur.REUNION_CREEE) AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("meeting.creation.success.title"), paquetRessourcesI18n.getString("meeting.creation.success.content"));
+                        else if(typeReponse == TypeReponseServeur.REUNION_MODIFIEE) notificationReunionMiseAJour.set(DetailsReunionDTO.fromJson(donneesJsonString)); // Pour ControleurTableauDeBord
                         break;
                     case REJOINDRE_OK:
-                        if (donneesJsonString != null) {
-                            detailsReunionActuelle.set(DetailsReunionDTO.fromJson(donneesJsonString));
-                        }
+                        if (donneesJsonString != null) detailsReunionActuelle.set(DetailsReunionDTO.fromJson(donneesJsonString));
                         break;
                     case NOUVEAU_MESSAGE_CHAT:
-                        if (donneesJsonString != null) {
-                            dernierMessageChatRecu.set(MessageChatDTO.fromJson(donneesJsonString));
-                        }
+                        if (donneesJsonString != null) dernierMessageChatRecu.set(MessageChatDTO.fromJson(donneesJsonString));
                         break;
                     case HISTORIQUE_MESSAGES:
                         if (donneesJsonString != null) {
                             JSONArray messagesArr = new JSONArray(donneesJsonString);
                             List<MessageChatDTO> hist = new ArrayList<>();
-                            for (int i = 0; i < messagesArr.length(); i++) {
-                                hist.add(MessageChatDTO.fromJson(messagesArr.getJSONObject(i).toString()));
-                            }
+                            for (int i = 0; i < messagesArr.length(); i++) hist.add(MessageChatDTO.fromJson(messagesArr.getJSONObject(i).toString()));
                             historiqueMessagesReunion.setAll(hist);
                         }
                         break;
-                    case DONNEES_UTILISATEUR: // Pour OBTENIR_MON_PROFIL
-                        if (donneesJsonString != null) {
-                            profilUtilisateurActuel.set(DonneesUtilisateurDTO.fromJson(donneesJsonString));
-                        }
+                    case DONNEES_UTILISATEUR:
+                        if (donneesJsonString != null) profilUtilisateurActuel.set(DonneesUtilisateurDTO.fromJson(donneesJsonString));
                         break;
-                    case LISTE_UTILISATEURS: // Pour ADMIN_LISTER_UTILISATEURS
+                    case LISTE_UTILISATEURS:
                         if (donneesJsonString != null) {
                             JSONArray utilisateursArr = new JSONArray(donneesJsonString);
                             List<DonneesUtilisateurDTO> listeU = new ArrayList<>();
-                            for (int i = 0; i < utilisateursArr.length(); i++) {
-                                listeU.add(DonneesUtilisateurDTO.fromJson(utilisateursArr.getJSONObject(i).toString()));
-                            }
+                            for (int i = 0; i < utilisateursArr.length(); i++) listeU.add(DonneesUtilisateurDTO.fromJson(utilisateursArr.getJSONObject(i).toString()));
                             listeGlobaleUtilisateurs.setAll(listeU);
                         }
                         break;
                     case ADMIN_UTILISATEUR_MODIFIE:
                         if (donneesJsonString != null) {
                             utilisateurMisAJourParAdmin.set(DonneesUtilisateurDTO.fromJson(donneesJsonString));
-                            AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("admin.user.update.success.title"), paquetRessourcesI18n.getString("admin.user.update.success.content"));
+                            // L'alerte est optionnelle, le contrôleur peut réagir à la propriété utilisateurMisAJourParAdmin
                         }
                         break;
                     case UTILISATEUR_REJOINT_REUNION:
                         if (donneesJsonString != null) {
-                            // Le payload devrait être { "idReunion": X, "utilisateur": DonneesUtilisateurDTO_JSON }
                             JSONObject joinPayload = new JSONObject(donneesJsonString);
-                            // long idReunionJoin = joinPayload.getLong("idReunion"); // Pour vérifier si c'est la réunion actuelle
-                            notificationUtilisateurRejoint.set(DonneesUtilisateurDTO.fromJson(joinPayload.getJSONObject("utilisateur").toString()));
+                            // Le serveur devrait envoyer {"idReunion": X, "utilisateur": DTO_UTILISATEUR_JSON}
+                            notificationUtilisateurRejoint.set(joinPayload);
                         }
                         break;
                     case UTILISATEUR_QUITTE_REUNION:
                         if (donneesJsonString != null) {
                             JSONObject quitPayload = new JSONObject(donneesJsonString);
-                            // long idReunionQuit = quitPayload.getLong("idReunion");
-                            notificationUtilisateurQuitte.set(DonneesUtilisateurDTO.fromJson(quitPayload.getJSONObject("utilisateur").toString()));
+                            notificationUtilisateurQuitte.set(quitPayload);
                         }
                         break;
-                    case NOTIFICATION_REUNION_CLOTUREE:
-                    case REUNION_CLOTUREE: // Le serveur envoie l'ID de la réunion clôturée
+                    case NOTIFICATION_REUNION_CLOTUREE: // Fallthrough ou même traitement
+                    case REUNION_CLOTUREE:
                         if (donneesJsonString != null) {
-                            try {
-                                notificationReunionClotureeId.set(Integer.parseInt(donneesJsonString));
-                            } catch (NumberFormatException nfe) {
-                                journal.error("ID de réunion pour clôture invalide: {}", donneesJsonString);
-                            }
+                            try { notificationReunionClotureeId.set(Integer.parseInt(donneesJsonString)); }
+                            catch (NumberFormatException nfe) { journal.error("ID de réunion pour clôture invalide: {}", donneesJsonString); }
                         }
                         break;
                     case ERREUR:
@@ -364,17 +333,25 @@ public class ServiceCommunicationServeur {
                         }
                         AlertesUtilisateur.afficherErreur(paquetRessourcesI18n.getString("error.server.title") + (codeErreur.isEmpty() ? "" : " ("+codeErreur+")"), messageErreur);
                         break;
-                    case OPERATION_OK: // Pour déconnexion, etc.
-                        // Pas besoin d'alerte spécifique souvent, l'UI réagira à la déconnexion de session.
+                    case OPERATION_OK:
+                        // Exemple: confirmation de déconnexion
+                        if (donneesJsonString != null && donneesJsonString.contains("Déconnexion réussie")) {
+                            // Le service de session est déjà vidé par deconnecterDuServeur()
+                            journal.info("Déconnexion confirmée par le serveur.");
+                        } else if (donneesJsonString != null && donneesJsonString.contains("Profil mis à jour")){
+                            AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("profile.update.success.title"), paquetRessourcesI18n.getString("profile.update.success.content"));
+                        } else if (donneesJsonString != null && donneesJsonString.contains("Mot de passe changé")){
+                            AlertesUtilisateur.afficherInformation(paquetRessourcesI18n.getString("password.change.success.title"), paquetRessourcesI18n.getString("password.change.success.content"));
+                        }
                         break;
                     default:
                         journal.warn("Traitement UI non implémenté pour le type de réponse serveur : {}", typeReponse);
                 }
             } catch (JSONException e) {
-                journal.error("Erreur de parsing JSON pour la réponse {} avec payload '{}': {}", typeReponse, donneesJsonString, e.getMessage(), e);
+                journal.error("Erreur de parsing JSON pour réponse {} avec payload '{}': {}", typeReponse, donneesJsonString, e.getMessage(), e);
                 AlertesUtilisateur.afficherErreur(paquetRessourcesI18n.getString("error.json.parsing.title"), paquetRessourcesI18n.getString("error.json.parsing.content") + "\n" + reponseBrute);
             } catch (Exception e) {
-                journal.error("Erreur inattendue lors du traitement de la réponse UI {} : {}", typeReponse, e.getMessage(), e);
+                journal.error("Erreur inattendue lors du traitement UI de réponse {} : {}", typeReponse, e.getMessage(), e);
                 AlertesUtilisateur.afficherErreur(paquetRessourcesI18n.getString("error.response.processing.title"), paquetRessourcesI18n.getString("error.response.processing.content") + "\n" + e.getMessage());
             }
         });
@@ -414,7 +391,6 @@ public class ServiceCommunicationServeur {
             envoyerRequeteAvecPayloadJson(TypeRequeteClient.MODIFIER_REUNION, details.toJsonString());
         } catch (JSONException e) {journal.error("Erreur JSON Modification Réunion: {}", e.getMessage());}
     }
-
 
     public void envoyerRequeteObtenirToutesLesReunions() {
         envoyerRequeteSimple(TypeRequeteClient.OBTENIR_REUNIONS);
@@ -484,7 +460,7 @@ public class ServiceCommunicationServeur {
         JSONObject json = new JSONObject();
         try {
             if (nomComplet != null) json.put("nomComplet", nomComplet);
-            if (identifiant != null) json.put("identifiant", identifiant);
+            if (identifiant != null) json.put("identifiant", identifiant); // Doit correspondre au DTO
             envoyerRequeteAvecPayloadJson(TypeRequeteClient.MODIFIER_PROFIL, json.toString());
         } catch (JSONException e) {journal.error("Erreur JSON Modifier Profil: {}", e.getMessage());}
     }
@@ -501,7 +477,7 @@ public class ServiceCommunicationServeur {
     public void envoyerRequeteAdminObtenirUtilisateurs(String filtre) {
         JSONObject json = new JSONObject();
         try {
-            if(filtre != null && !filtre.isEmpty()) json.put("filtre", filtre);
+            if(filtre != null && !filtre.isEmpty()) json.put("filtre", filtre); // Le serveur doit savoir gérer ce filtre optionnel
             envoyerRequeteAvecPayloadJson(TypeRequeteClient.ADMIN_OBTENIR_UTILISATEURS, json.toString());
         } catch (JSONException e) {journal.error("Erreur JSON Admin Lister Utilisateurs: {}", e.getMessage());}
     }
@@ -510,6 +486,26 @@ public class ServiceCommunicationServeur {
         try {
             envoyerRequeteAvecPayloadJson(TypeRequeteClient.ADMIN_MODIFIER_UTILISATEUR, dto.toJsonString());
         } catch (JSONException e) {journal.error("Erreur JSON Admin Modifier Utilisateur: {}", e.getMessage());}
+    }
+
+    public void envoyerRequeteAdminSupprimerUtilisateur(long idUtilisateur) {
+        JSONObject json = new JSONObject();
+        try {
+            json.put("idUtilisateur", idUtilisateur);
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.ADMIN_SUPPRIMER_UTILISATEUR, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Admin Supprimer Utilisateur: {}", e.getMessage());}
+    }
+
+    public void envoyerRequeteAdminCreerUtilisateur(String identifiant, String motDePasse, String nomComplet, RoleUtilisateur role, StatutCompteUtilisateur statut) {
+        JSONObject json = new JSONObject();
+        try {
+            json.put("identifiant", identifiant);
+            json.put("motDePasse", motDePasse);
+            json.put("nomComplet", nomComplet);
+            json.put("role", role.name());
+            json.put("statutCompte", statut.name());
+            envoyerRequeteAvecPayloadJson(TypeRequeteClient.ADMIN_CREER_UTILISATEUR, json.toString());
+        } catch (JSONException e) {journal.error("Erreur JSON Admin Créer Utilisateur: {}", e.getMessage());}
     }
 
 
@@ -522,8 +518,8 @@ public class ServiceCommunicationServeur {
     public ObjectProperty<DonneesUtilisateurDTO> profilUtilisateurActuelProperty() { return profilUtilisateurActuel; }
     public ListProperty<DonneesUtilisateurDTO> listeGlobaleUtilisateursProperty() { return listeGlobaleUtilisateurs; }
     public BooleanProperty etatConnexionServeurProperty() { return etatConnexionServeur; }
-    public ObjectProperty<DonneesUtilisateurDTO> notificationUtilisateurRejointProperty() { return notificationUtilisateurRejoint; }
-    public ObjectProperty<DonneesUtilisateurDTO> notificationUtilisateurQuitteProperty() { return notificationUtilisateurQuitte; }
+    public ObjectProperty<JSONObject> notificationUtilisateurRejointProperty() { return notificationUtilisateurRejoint; }
+    public ObjectProperty<JSONObject> notificationUtilisateurQuitteProperty() { return notificationUtilisateurQuitte; }
     public ObjectProperty<DetailsReunionDTO> notificationReunionMiseAJourProperty() { return notificationReunionMiseAJour; }
     public IntegerProperty notificationReunionClotureeIdProperty() { return notificationReunionClotureeId; }
     public ObjectProperty<DonneesUtilisateurDTO> utilisateurMisAJourParAdminProperty() { return utilisateurMisAJourParAdmin;}

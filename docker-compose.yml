@@ -1,5 +1,4 @@
 services:
-  # --- Service Base de Données MySQL ---
   bmo-db:
     image: mysql:8.3
     container_name: bmo_base_de_donnees_conteneur
@@ -23,7 +22,6 @@ services:
       retries: 5
       start_period: 60s
 
-  # --- Service Application Serveur BMO ---
   bmo-serveur-app:
     build:
       context: .
@@ -43,7 +41,6 @@ services:
     networks:
       - bmo_reseau_interne
 
-  # --- Service PhpMyAdmin ---
   bmo-phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     container_name: bmo_phpmyadmin_conteneur
@@ -60,11 +57,10 @@ services:
     networks:
       - bmo_reseau_interne
 
-  # --- Service Application Client BMO (JavaFX) ---
   bmo-client-app:
     build:
-      context: ./bmo-client  # <--- CONTEXTE MODIFIÉ ICI
-      dockerfile: bmo-client/Dockerfile    # <--- Dockerfile est maintenant à la racine de ce nouveau contexte (bmo-client/Dockerfile)
+      context: . # MODIFIÉ: Le contexte est maintenant la racine du projet
+      dockerfile: bmo-client/Dockerfile # MODIFIÉ: Chemin relatif à la racine du projet
     container_name: bmo_client_conteneur
     restart: "no"
     depends_on:

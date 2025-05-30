@@ -36,7 +36,6 @@ public class AnalyseurRequeteClient {
     private final ServiceCommunicationReunion serviceCommunicationReunion;
     private final ServiceAdministration serviceAdministration;
     private static final Logger journal = LoggerFactory.getLogger(AnalyseurRequeteClient.class);
-    private static final String DELIMITEUR_PARAMETRES_REQUETE = "\\" + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE;
 
     public AnalyseurRequeteClient(ServiceAuthentification authService, ServiceGestionUtilisateurs userGestService, ServiceGestionReunions meetingGestService, ServiceCommunicationReunion commMeetingService, ServiceAdministration adminService) {
         this.serviceAuthentification = authService;
@@ -48,17 +47,24 @@ public class AnalyseurRequeteClient {
 
     private String formaterReponseJson(TypeReponseServeur typeReponse, Object objetPayload) throws JSONException {
         String payloadStr = "";
-        if (objetPayload instanceof JSONObject || objetPayload instanceof JSONArray) {
+        if (objetPayload == null) {
+            // Pour certains types de réponse, un payload null est acceptable (ex: OPERATION_OK)
+            // Pour d'autres, cela pourrait être une erreur à gérer en amont.
+        } else if (objetPayload instanceof JSONObject || objetPayload instanceof JSONArray) {
             payloadStr = objetPayload.toString();
-        } else if (objetPayload instanceof String) {
-            payloadStr = (String) objetPayload;
         } else if (objetPayload instanceof DonneesUtilisateurDTO) {
             payloadStr = ((DonneesUtilisateurDTO) objetPayload).toJsonString();
         } else if (objetPayload instanceof DetailsReunionDTO) {
             payloadStr = ((DetailsReunionDTO) objetPayload).toJsonString();
         } else if (objetPayload instanceof MessageChatDTO) {
             payloadStr = ((MessageChatDTO) objetPayload).toJsonString();
-        } else if (objetPayload instanceof List) { // Pour les listes de DTOs
+        } else if (objetPayload instanceof ReponseGeneriqueDTO) {
+            // ReponseGeneriqueDTO n'a pas de toJsonString, on prend son message
+            payloadStr = ((ReponseGeneriqueDTO) objetPayload).getMessage();
+            if (((ReponseGeneriqueDTO) objetPayload).getCodeErreur() != null) {
+                payloadStr += ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + ((ReponseGeneriqueDTO) objetPayload).getCodeErreur();
+            }
+        } else if (objetPayload instanceof List) {
             JSONArray jsonArray = new JSONArray();
             for (Object item : (List<?>) objetPayload) {
                 if (item instanceof DonneesUtilisateurDTO) {
@@ -68,26 +74,26 @@ public class AnalyseurRequeteClient {
                 } else if (item instanceof MessageChatDTO) {
                     jsonArray.put(new JSONObject(((MessageChatDTO) item).toJsonString()));
                 } else {
-                    jsonArray.put(item); // Pour les types simples
+                    jsonArray.put(item.toString()); // Fallback pour autres types dans la liste
                 }
             }
             payloadStr = jsonArray.toString();
-        } else if (objetPayload != null) { // Pour les types simples comme Long, Integer, String, Boolean
+        } else { // Pour les types simples comme Long, Integer, String, Boolean
             payloadStr = String.valueOf(objetPayload);
         }
         return typeReponse.getValeurProtocole() + (payloadStr.isEmpty() ? "" : ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + payloadStr);
     }
 
-
     private String formaterReponseErreur(String codeErreur, String messageErreur) {
+        JSONObject erreurJson = new JSONObject();
         try {
-            JSONObject erreurJson = new JSONObject();
             erreurJson.put("codeErreur", codeErreur);
             erreurJson.put("message", messageErreur);
-            return TypeReponseServeur.ERREUR.getValeurProtocole() + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + erreurJson.toString();
         } catch (JSONException e) {
-            return TypeReponseServeur.ERREUR.getValeurProtocole() + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + "{\"codeErreur\":\"ERREUR_FORMATAGE_JSON_INTERNE\",\"message\":\"Erreur interne lors de la création du message d'erreur.\"}";
+            // Should not happen with simple puts
+            journal.error("Erreur interne de JSONException lors du formatage de l'erreur.", e);
         }
+        return TypeReponseServeur.ERREUR.getValeurProtocole() + ConstantesProtocoleBMO.DELIMITEUR_COMMANDE + erreurJson.toString();
     }
 
     private boolean estAuthentifie(ThreadClientDedie threadClient) {
@@ -99,8 +105,9 @@ public class AnalyseurRequeteClient {
     }
 
     private boolean estAdmin(ThreadClientDedie threadClient) {
-        if (!estAuthentifie(threadClient)) return false;
-        Optional<DonneesUtilisateurDTO> dtoOpt = this.serviceGestionUtilisateurs.obtenirDonneesUtilisateur(threadClient.obtenirIdUtilisateurAuthentifie());
+        Long idUtilisateur = threadClient.obtenirIdUtilisateurAuthentifie();
+        if (idUtilisateur == null) return false;
+        Optional<DonneesUtilisateurDTO> dtoOpt = this.serviceGestionUtilisateurs.obtenirDonneesUtilisateur(idUtilisateur);
         return dtoOpt.isPresent() && dtoOpt.get().getRole() == RoleUtilisateur.ADMINISTRATEUR;
     }
 
@@ -112,10 +119,7 @@ public class AnalyseurRequeteClient {
         if (requeteBrute == null || requeteBrute.trim().isEmpty()) {
             return formaterReponseErreur("REQUETE_VIDE", "La requête reçue est vide.");
         }
-        String[] tokens = requeteBrute.split(DELIMITEUR_PARAMETRES_REQUETE, 2);
-        if (tokens.length == 0) {
-            return formaterReponseErreur("FORMAT_REQUETE_INVALIDE", "Format de requête invalide.");
-        }
+        String[] tokens = requeteBrute.split(ConstantesProtocoleBMO.DELIMITEUR_COMMANDE, 2);
         String commandeStr = tokens[0].toUpperCase();
         String payloadJsonString = (tokens.length > 1) ? tokens[1] : null;
         TypeRequeteClient typeRequete;
@@ -126,14 +130,14 @@ public class AnalyseurRequeteClient {
             return formaterReponseErreur("COMMANDE_INCONNUE", "La commande '" + commandeStr + "' est inconnue.");
         }
 
-        journal.debug("Traitement de la requête de type {} pour le client {} avec payload : {}", typeRequete, threadClientConcerne.getSocketClientCommunication().getRemoteSocketAddress(), payloadJsonString);
+        journal.debug("Traitement requête: {} de {}, payload: {}", typeRequete, threadClientConcerne.getSocketClientCommunication().getRemoteSocketAddress(), payloadJsonString);
         JSONObject jsonPayload = null;
-        if (payloadJsonString != null && !payloadJsonString.isEmpty()) {
+        if (payloadJsonString != null && !payloadJsonString.isEmpty() && !"null".equalsIgnoreCase(payloadJsonString)) {
             try {
                 jsonPayload = new JSONObject(payloadJsonString);
             } catch (JSONException e) {
-                journal.warn("Payload JSON invalide pour la commande {} : {}", typeRequete.name(), payloadJsonString, e);
-                return formaterReponseErreur("PAYLOAD_JSON_INVALIDE", "Le format des données envoyées est incorrect.");
+                journal.warn("Payload JSON invalide pour {}: {}. Erreur: {}", typeRequete.name(), payloadJsonString, e.getMessage());
+                return formaterReponseErreur("PAYLOAD_JSON_INVALIDE", "Format des données incorrect.");
             }
         }
 
@@ -207,17 +211,20 @@ public class AnalyseurRequeteClient {
                     return formaterReponseErreur("COMMANDE_NON_GEREE", "La commande '" + typeRequete.name() + "' n'est pas encore gérée.");
             }
         } catch (JSONException e) {
-            journal.warn("Erreur de parsing JSON pour la commande {} et payload '{}' : {}", typeRequete.name(), payloadJsonString, e.getMessage());
-            return formaterReponseErreur("PAYLOAD_JSON_INVALIDE", "Format de données incorrect pour la commande: " + e.getMessage());
+            journal.warn("Erreur de parsing JSON pour la commande {} avec payload '{}' : {}", typeRequete.name(), payloadJsonString, e.getMessage());
+            return formaterReponseErreur("PAYLOAD_JSON_INVALIDE", "Format de données JSON incorrect pour la commande: " + e.getMessage());
+        } catch (ExceptionPersistance ep) {
+            journal.error("Erreur de persistance lors du traitement de {} : {}", typeRequete.name(), ep.getMessage(), ep);
+            return formaterReponseErreur("ERREUR_PERSISTANCE", "Une erreur de base de données est survenue.");
         } catch (Exception e) {
             journal.error("Erreur inattendue lors du traitement de la commande {} : {}", typeRequete.name(), e.getMessage(), e);
-            return formaterReponseErreur("ERREUR_INTERNE_ANALYSEUR", "Une erreur interne est survenue lors du traitement de votre requête.");
+            return formaterReponseErreur("ERREUR_INTERNE_ANALYSEUR", "Une erreur interne est survenue lors du traitement.");
         }
     }
 
     private String traiterConnexion(JSONObject payload, ThreadClientDedie threadClient) throws JSONException {
         if (payload == null) return formaterReponseErreur("PARAM_MANQUANT", "Données de connexion manquantes.");
-        String identifiant = payload.getString("identifiant"); // Use getString for mandatory fields
+        String identifiant = payload.getString("identifiant");
         String motDePasse = payload.getString("motDePasse");
         Optional<DonneesUtilisateurDTO> dtoOpt = this.serviceAuthentification.authentifierUtilisateur(identifiant, motDePasse);
         if (dtoOpt.isPresent()) {
@@ -235,30 +242,29 @@ public class AnalyseurRequeteClient {
         String motDePasse = payload.getString("motDePasse");
         String nomComplet = payload.getString("nomComplet");
         ReponseGeneriqueDTO reponse = this.serviceAuthentification.inscrireNouvelUtilisateur(identifiant, motDePasse, nomComplet);
-        return formaterReponseJson(reponse.isSucces() ? TypeReponseServeur.INSCRIPTION_OK : TypeReponseServeur.INSCRIPTION_ECHEC, reponse.getMessage());
+        return formaterReponseJson(reponse.isSucces() ? TypeReponseServeur.INSCRIPTION_OK : TypeReponseServeur.INSCRIPTION_ECHEC, reponse);
     }
 
     private String traiterDeconnexion(ThreadClientDedie threadClient) throws JSONException {
-        journal.info("Client {} (Utilisateur ID: {}) a demandé la déconnexion.", threadClient.getSocketClientCommunication().getRemoteSocketAddress(), threadClient.obtenirIdUtilisateurAuthentifie());
+        Long idUtilisateur = threadClient.obtenirIdUtilisateurAuthentifie();
+        journal.info("Client {} (Utilisateur ID: {}) a demandé la déconnexion.", threadClient.getSocketClientCommunication().getRemoteSocketAddress(), idUtilisateur);
         threadClient.reinitialiserAuthentification();
-        threadClient.setClientConnecte(false); // Signalera au thread de terminer
+        threadClient.setClientConnecte(false);
         return formaterReponseJson(TypeReponseServeur.OPERATION_OK, "Déconnexion réussie.");
     }
 
     private String traiterNouvelleReunion(JSONObject payload, Long idOrganisateur) throws JSONException {
         if (payload == null) return formaterReponseErreur("PARAM_MANQUANT", "Données de réunion manquantes.");
         if (idOrganisateur == null) return reponseAccesRefuse();
-
         DetailsReunionDTO dtoRequete = DetailsReunionDTO.fromJson(payload.toString());
         Optional<DetailsReunionDTO> dtoCreeOpt = this.serviceGestionReunions.creerNouvelleReunion(
                 dtoRequete.getTitre(), dtoRequete.getDescription(), dtoRequete.getDateHeureDebut(),
                 dtoRequete.getDureeEstimeeMinutes(), dtoRequete.getTypeReunion(),
                 dtoRequete.getMotDePasseOptionnelValeur(), idOrganisateur);
-
         if (dtoCreeOpt.isPresent()) {
             return formaterReponseJson(TypeReponseServeur.REUNION_CREEE, dtoCreeOpt.get());
         } else {
-            return formaterReponseErreur("CREATION_REUNION_ECHEC", "Impossible de créer la réunion.");
+            return formaterReponseErreur("CREATION_REUNION_ECHEC", "Impossible de créer la réunion (vérifiez les logs serveur pour détails).");
         }
     }
 
@@ -284,17 +290,21 @@ public class AnalyseurRequeteClient {
         }
     }
 
-    private String traiterRejoindreReunion(JSONObject payload, ThreadClientDedie threadClient) throws JSONException, ExceptionPersistance {
+    private String traiterRejoindreReunion(JSONObject payload, ThreadClientDedie threadClient) throws JSONException {
         if (payload == null || !payload.has("idReunion")) return formaterReponseErreur("PARAM_MANQUANT", "ID de réunion manquant.");
         long idReunion = payload.getLong("idReunion");
         String motDePasseFourni = payload.optString("motDePasseFourni", null);
         Long idUtilisateur = threadClient.obtenirIdUtilisateurAuthentifie();
         if (idUtilisateur == null) return reponseAccesRefuse();
-
         ReponseGeneriqueDTO reponse = this.serviceGestionReunions.rejoindreReunion(idReunion, idUtilisateur, threadClient, motDePasseFourni);
         if (reponse.isSucces()) {
-            Optional<DetailsReunionDTO> dtoOpt = serviceGestionReunions.obtenirDetailsReunion(idReunion);
-            return formaterReponseJson(TypeReponseServeur.REJOINDRE_OK, dtoOpt.orElse(null)); // Envoyer les détails de la réunion si disponibles
+            try {
+                Optional<DetailsReunionDTO> dtoOpt = serviceGestionReunions.obtenirDetailsReunion(idReunion);
+                return formaterReponseJson(TypeReponseServeur.REJOINDRE_OK, dtoOpt.orElse(null));
+            } catch (ExceptionPersistance e) {
+                journal.error("Erreur récupération détails réunion après REJOINDRE_OK: {}", e.getMessage());
+                return formaterReponseJson(TypeReponseServeur.REJOINDRE_OK, new JSONObject().put("message", reponse.getMessage()).put("details_error", true).toString());
+            }
         } else {
             return formaterReponseJson(TypeReponseServeur.REJOINDRE_ECHEC, reponse.getMessage());
         }
@@ -305,7 +315,6 @@ public class AnalyseurRequeteClient {
         long idReunion = payload.getLong("idReunion");
         Long idUtilisateur = threadClient.obtenirIdUtilisateurAuthentifie();
         if (idUtilisateur == null) return reponseAccesRefuse();
-
         ReponseGeneriqueDTO reponse = this.serviceGestionReunions.quitterReunion(idReunion, idUtilisateur, threadClient);
         return formaterReponseJson(reponse.isSucces() ? TypeReponseServeur.QUITTER_OK : TypeReponseServeur.QUITTER_ECHEC, reponse.getMessage());
     }
@@ -313,8 +322,7 @@ public class AnalyseurRequeteClient {
     private String traiterMessageChat(JSONObject payload, Long idUtilisateurEmetteur) throws JSONException {
         if (payload == null || !payload.has("idReunion") || !payload.has("contenu")) return formaterReponseErreur("PARAM_MANQUANT", "Données de message chat manquantes.");
         if (idUtilisateurEmetteur == null) return reponseAccesRefuse();
-        MessageChatDTO messageRecu = MessageChatDTO.fromJson(payload.toString()); // Utiliser le DTO pour extraire
-
+        MessageChatDTO messageRecu = MessageChatDTO.fromJson(payload.toString());
         this.serviceCommunicationReunion.traiterNouveauMessageChat(messageRecu.getIdReunion(), idUtilisateurEmetteur, messageRecu.getContenu());
         return null;
     }
@@ -346,7 +354,7 @@ public class AnalyseurRequeteClient {
         if (payload == null) return formaterReponseErreur("PARAM_MANQUANT", "Données de profil manquantes.");
         if (idUtilisateur == null) return reponseAccesRefuse();
         String nomComplet = payload.optString("nomComplet", null);
-        String identifiant = payload.optString("identifiant", null); // DTO utilise 'identifiant'
+        String identifiant = payload.optString("identifiant", null);
         ReponseGeneriqueDTO reponse = serviceGestionUtilisateurs.mettreAJourProfilUtilisateur(idUtilisateur, nomComplet, identifiant);
         return formaterReponseJson(reponse.isSucces() ? TypeReponseServeur.PROFIL_MODIFIE_OK : TypeReponseServeur.ERREUR, reponse.getMessage());
     }
@@ -406,8 +414,7 @@ public class AnalyseurRequeteClient {
 
     private String traiterAdminObtenirConfig() throws JSONException {
         Map<String, String> config = serviceAdministration.obtenirConfigurationServeur();
-        JSONObject json = new JSONObject(config);
-        return formaterReponseJson(TypeReponseServeur.ADMIN_CONFIG_LISTE, json);
+        return formaterReponseJson(TypeReponseServeur.ADMIN_CONFIG_LISTE, new JSONObject(config));
     }
 
     private String traiterAdminDefinirConfig(JSONObject payload) throws JSONException {

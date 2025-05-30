@@ -1,24 +1,25 @@
 package akandan.bahou.kassy.serveur.noyau;
 
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.io.IOException;
 import akandan.bahou.kassy.serveur.configuration.ConfigurateurServeur;
 import akandan.bahou.kassy.serveur.dao.GestionnaireConnexionBaseDeDonnees;
-import akandan.bahou.kassy.serveur.dao.InterfaceUtilisateurDAO;
-import akandan.bahou.kassy.serveur.dao.UtilisateurDAOImpl;
-import akandan.bahou.kassy.serveur.dao.InterfaceReunionDAO;
-import akandan.bahou.kassy.serveur.dao.ReunionDAOImpl;
 import akandan.bahou.kassy.serveur.dao.InterfaceMessageChatDAO;
-import akandan.bahou.kassy.serveur.dao.MessageChatDAOImpl;
 import akandan.bahou.kassy.serveur.dao.InterfaceParticipationReunionDAO;
+import akandan.bahou.kassy.serveur.dao.InterfaceReunionDAO;
+import akandan.bahou.kassy.serveur.dao.InterfaceUtilisateurDAO;
+import akandan.bahou.kassy.serveur.dao.MessageChatDAOImpl;
 import akandan.bahou.kassy.serveur.dao.ParticipationReunionDAOImpl;
-import akandan.bahou.kassy.serveur.service.ServiceAuthentification;
-import akandan.bahou.kassy.serveur.service.ServiceGestionUtilisateurs;
-import akandan.bahou.kassy.serveur.service.ServiceGestionReunions;
-import akandan.bahou.kassy.serveur.service.ServiceCommunicationReunion;
+import akandan.bahou.kassy.serveur.dao.ReunionDAOImpl;
+import akandan.bahou.kassy.serveur.dao.UtilisateurDAOImpl;
 import akandan.bahou.kassy.serveur.service.ServiceAdministration;
+import akandan.bahou.kassy.serveur.service.ServiceAuthentification;
+import akandan.bahou.kassy.serveur.service.ServiceCommunicationReunion;
+import akandan.bahou.kassy.serveur.service.ServiceGestionReunions;
+import akandan.bahou.kassy.serveur.service.ServiceGestionUtilisateurs;
 import akandan.bahou.kassy.serveur.util.AnalyseurRequeteClient;
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +60,12 @@ public class ServeurPrincipalBMO {
         this.serviceGestionReunions = new ServiceGestionReunions(this.reunionDAO, this.participationReunionDAO, this.utilisateurDAO, this.serviceCommunicationReunion);
         this.serviceAdministration = new ServiceAdministration(this.utilisateurDAO, this.configurateurServeur);
 
+        try {
+            this.serviceAdministration.initialiserUtilisateursParDefautSiNecessaire();
+        } catch (Exception e) {
+            journal.error("Erreur lors de l'initialisation des utilisateurs par défaut. Le serveur continuera sans eux.", e);
+        }
+
         this.analyseurDeRequetesClient = new AnalyseurRequeteClient(this.serviceAuthentification, this.serviceGestionUtilisateurs, this.serviceGestionReunions, this.serviceCommunicationReunion, this.serviceAdministration);
         journal.info("Serveur BMO initialisé. Prêt à démarrer sur le port {}.", this.portEcoute);
     }
@@ -72,28 +79,30 @@ public class ServeurPrincipalBMO {
         } catch (IOException e) {
             journal.error("Impossible de démarrer le serveur BMO en raison d'une erreur d'E/S.", e);
         } catch (Exception e) {
-            journal.error("Une erreur critique est survenue lors de l'initialisation du serveur BMO.", e);
+            journal.error("Une erreur critique est survenue lors de l'initialisation ou du démarrage du serveur BMO.", e);
         }
     }
 
     public void demarrerEcoute() throws IOException {
         this.socketServeurEcoute = new ServerSocket(this.portEcoute);
         journal.info("Serveur BMO démarré et en écoute sur le port {}.", this.portEcoute);
-        while (this.serveurActif && !this.socketServeurEcoute.isClosed()) {
+        while (this.serveurActif && this.socketServeurEcoute != null && !this.socketServeurEcoute.isClosed()) {
             try {
                 journal.debug("En attente d'une nouvelle connexion client...");
                 Socket socketClient = this.socketServeurEcoute.accept();
                 journal.info("Nouvelle connexion client acceptée de : {}:{}", socketClient.getInetAddress().getHostAddress(), socketClient.getPort());
                 ThreadClientDedie gestionnaireClient = new ThreadClientDedie(socketClient, this.analyseurDeRequetesClient);
                 this.poolDeThreads.soumettreTache(gestionnaireClient);
-            } catch (java.net.SocketException se) {
+            } catch (SocketException se) {
                 if (this.serveurActif) {
-                    journal.error("SocketException lors de l'acceptation d'une connexion client (le socket serveur a peut-être été fermé).", se);
+                    journal.warn("SocketException lors de l'acceptation d'une connexion client (serveur en cours d'arrêt ?): {}", se.getMessage());
                 } else {
                     journal.info("ServerSocket fermé, arrêt de la boucle d'acceptation.");
                 }
             } catch (IOException ioe) {
-                journal.error("Erreur d'E/S lors de l'acceptation d'une connexion client.", ioe);
+                if (this.serveurActif) {
+                    journal.error("Erreur d'E/S lors de l'acceptation d'une connexion client.", ioe);
+                }
             }
         }
         journal.info("La boucle d'écoute du serveur BMO est terminée.");
@@ -101,17 +110,20 @@ public class ServeurPrincipalBMO {
 
     private void enregistrerHookArret() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            journal.info("Hook d'arrêt déclenché. Arrêt du serveur BMO...");
+            journal.info("Hook d'arrêt déclenché. Tentative d'arrêt propre du serveur BMO...");
             this.arreterServeur();
         }));
     }
 
     public void arreterServeur() {
+        journal.info("Arrêt du serveur BMO en cours...");
         this.serveurActif = false;
-        journal.info("Arrêt du pool de threads...");
+
         if (this.poolDeThreads != null) {
+            journal.info("Arrêt du pool de threads...");
             this.poolDeThreads.arreterPoolProprement();
         }
+
         journal.info("Fermeture du socket serveur d'écoute...");
         try {
             if (this.socketServeurEcoute != null && !this.socketServeurEcoute.isClosed()) {
@@ -120,6 +132,7 @@ public class ServeurPrincipalBMO {
         } catch (IOException e) {
             journal.error("Erreur lors de la fermeture du socket serveur d'écoute.", e);
         }
+
         journal.info("Serveur BMO arrêté.");
     }
 }

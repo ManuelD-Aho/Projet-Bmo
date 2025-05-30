@@ -14,7 +14,7 @@ import akandan.bahou.kassy.serveur.dao.InterfaceUtilisateurDAO;
 import akandan.bahou.kassy.serveur.modele.Utilisateur;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap; // Pour la config
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 public class ServiceAdministration {
 
     private final InterfaceUtilisateurDAO utilisateurDAO;
-    private final ConfigurateurServeur configurateurServeur; // Sera utilisé pour obtenir la config
+    private final ConfigurateurServeur configurateurServeur;
     private static final Logger journal = LoggerFactory.getLogger(ServiceAdministration.class);
 
     public ServiceAdministration(InterfaceUtilisateurDAO utilisateurDAO, ConfigurateurServeur configurateurServeur) {
@@ -49,24 +49,19 @@ public class ServiceAdministration {
     }
 
     public List<DonneesUtilisateurDTO> listerTousLesUtilisateurs() throws ExceptionPersistance {
-        journal.debug("Tentative de listage de tous les utilisateurs par un administrateur.");
         List<Utilisateur> entitesUtilisateur = this.utilisateurDAO.trouverTous();
-        List<DonneesUtilisateurDTO> dtosUtilisateur = entitesUtilisateur.stream()
+        return entitesUtilisateur.stream()
                 .map(this::convertirEntiteUtilisateurVersDTO)
                 .collect(Collectors.toList());
-        journal.info("Liste de {} utilisateurs récupérée par un administrateur.", dtosUtilisateur.size());
-        return dtosUtilisateur;
     }
 
     public ReponseGeneriqueDTO creerUtilisateurParAdmin(String identifiant, String motDePasseInitial, String nomComplet, RoleUtilisateur role, StatutCompteUtilisateur statutInitial) {
-        journal.debug("Tentative de création d'utilisateur par admin : {}", identifiant);
         try {
             ValidateurEntreeUtilisateur.validerIdentifiantConnexion(identifiant, "Identifiant de connexion");
             ValidateurEntreeUtilisateur.validerComplexiteMotDePasse(motDePasseInitial, "Mot de passe initial");
             ValidateurEntreeUtilisateur.validerNonNulOuVide(nomComplet, "Nom complet");
 
             if (this.utilisateurDAO.existeParIdentifiantConnexion(identifiant)) {
-                journal.warn("Échec création utilisateur par admin : Identifiant '{}' déjà existant.", identifiant);
                 return new ReponseGeneriqueDTO(false, "L'identifiant de connexion existe déjà.", "ID_CONN_EXISTANT");
             }
 
@@ -96,11 +91,9 @@ public class ServiceAdministration {
     }
 
     public ReponseGeneriqueDTO modifierUtilisateurParAdmin(long idUtilisateurAModifier, String nouvelIdentifiant, String nouveauNomComplet, RoleUtilisateur nouveauRole, StatutCompteUtilisateur nouveauStatutCompte) {
-        journal.debug("Tentative de modification de l'utilisateur ID {} par admin.", idUtilisateurAModifier);
         try {
-            Optional<Utilisateur> utilisateurOpt = this.utilisateurDAO.trouverParId((int)idUtilisateurAModifier); // DAO attend int
+            Optional<Utilisateur> utilisateurOpt = this.utilisateurDAO.trouverParId(idUtilisateurAModifier);
             if (utilisateurOpt.isEmpty()) {
-                journal.warn("Échec modification utilisateur par admin : Utilisateur ID {} non trouvé.", idUtilisateurAModifier);
                 return new ReponseGeneriqueDTO(false, "Utilisateur non trouvé.", "UTIL_NON_TROUVE");
             }
 
@@ -110,7 +103,6 @@ public class ServiceAdministration {
             if (nouvelIdentifiant != null && !nouvelIdentifiant.trim().isEmpty() && !nouvelIdentifiant.trim().equals(utilisateurAModifier.getIdentifiant())) {
                 ValidateurEntreeUtilisateur.validerIdentifiantConnexion(nouvelIdentifiant.trim(), "Nouvel identifiant de connexion");
                 if (this.utilisateurDAO.existeParIdentifiantConnexion(nouvelIdentifiant.trim())) {
-                    journal.warn("Échec modification utilisateur par admin : Nouvel identifiant '{}' déjà existant.", nouvelIdentifiant.trim());
                     return new ReponseGeneriqueDTO(false, "Le nouvel identifiant de connexion est déjà utilisé par un autre compte.", "ID_CONN_EXISTANT");
                 }
                 utilisateurAModifier.setIdentifiant(nouvelIdentifiant.trim());
@@ -138,7 +130,6 @@ public class ServiceAdministration {
                 journal.info("Utilisateur ID {} modifié par un administrateur.", idUtilisateurAModifier);
                 return new ReponseGeneriqueDTO(true, "Utilisateur modifié avec succès.");
             } else {
-                journal.info("Aucune modification détectée pour l'utilisateur ID {}.", idUtilisateurAModifier);
                 return new ReponseGeneriqueDTO(true, "Aucune modification n'a été apportée.");
             }
 
@@ -152,21 +143,16 @@ public class ServiceAdministration {
     }
 
     public ReponseGeneriqueDTO supprimerUtilisateurParAdmin(long idUtilisateurASupprimer) {
-        journal.debug("Tentative de suppression de l'utilisateur ID {} par admin.", idUtilisateurASupprimer);
         try {
-            if (this.utilisateurDAO.trouverParId((int)idUtilisateurASupprimer).isEmpty()) {
-                journal.warn("Échec suppression utilisateur par admin : Utilisateur ID {} non trouvé.", idUtilisateurASupprimer);
+            if (this.utilisateurDAO.trouverParId(idUtilisateurASupprimer).isEmpty()) {
                 return new ReponseGeneriqueDTO(false, "Utilisateur non trouvé.", "UTIL_NON_TROUVE");
             }
-            // Ajouter ici la logique pour gérer les dépendances (ex: réunions organisées par cet utilisateur)
-            // Pour l'instant, suppression directe.
 
-            boolean supprime = this.utilisateurDAO.supprimer((int)idUtilisateurASupprimer);
+            boolean supprime = this.utilisateurDAO.supprimer(idUtilisateurASupprimer);
             if (supprime) {
                 journal.info("Utilisateur ID {} supprimé par un administrateur.", idUtilisateurASupprimer);
                 return new ReponseGeneriqueDTO(true, "Utilisateur supprimé avec succès.");
             } else {
-                journal.warn("La suppression de l'utilisateur ID {} par admin n'a affecté aucune ligne.", idUtilisateurASupprimer);
                 return new ReponseGeneriqueDTO(false, "La suppression de l'utilisateur a échoué.", "SUPPR_UTIL_ECHEC");
             }
         } catch (ExceptionPersistance e) {
@@ -179,17 +165,47 @@ public class ServiceAdministration {
     }
 
     public Map<String, String> obtenirConfigurationServeur() {
-        journal.debug("Tentative d'obtention de la configuration serveur par un administrateur.");
-        // Ceci est une implémentation simpliste. Une vraie application pourrait avoir une liste de clés configurables.
         Map<String, String> configAffichee = new HashMap<>();
         configAffichee.put("bmo.serveur.port", String.valueOf(configurateurServeur.recupererProprieteEntier("bmo.serveur.port", 0)));
         configAffichee.put("bmo.poolthreads.taillemaximale", String.valueOf(configurateurServeur.recupererProprieteEntier("bmo.poolthreads.taillemaximale", 0)));
-        // NE PAS exposer les mots de passe ou URLs de base de données ici.
         return configAffichee;
     }
 
     public ReponseGeneriqueDTO definirConfigurationServeur(String cleConfiguration, String valeurConfiguration) {
-        journal.warn("Tentative de définition de la configuration serveur ('{}'='{}') par un administrateur. Cette fonctionnalité n'est pas supportée pour modification à la volée dans cette version.", cleConfiguration, valeurConfiguration);
+        journal.warn("Tentative de définition de la configuration serveur ('{}'='{}') par un administrateur. Non supporté.", cleConfiguration, valeurConfiguration);
         return new ReponseGeneriqueDTO(false, "La modification de la configuration serveur à la volée n'est pas supportée.", "CONFIG_NON_MODIFIABLE");
+    }
+
+    public void initialiserUtilisateursParDefautSiNecessaire() {
+        journal.info("Vérification et initialisation des utilisateurs par défaut...");
+        creerUtilisateurSiNonExistant("admin@bmo.com", "AdminBMO!2025", "Administrateur BMO", RoleUtilisateur.ADMINISTRATEUR, StatutCompteUtilisateur.ACTIF);
+        creerUtilisateurSiNonExistant("organisateur@bmo.com", "OrgaBMO!2025", "Organisateur Principal", RoleUtilisateur.ORGANISATEUR, StatutCompteUtilisateur.ACTIF);
+        creerUtilisateurSiNonExistant("participant@bmo.com", "PartBMO!2025", "Participant Test", RoleUtilisateur.PARTICIPANT, StatutCompteUtilisateur.ACTIF);
+        journal.info("Vérification des utilisateurs par défaut terminée.");
+    }
+
+    private void creerUtilisateurSiNonExistant(String identifiant, String motDePasseClair, String nomComplet, RoleUtilisateur role, StatutCompteUtilisateur statut) {
+        try {
+            if (!this.utilisateurDAO.existeParIdentifiantConnexion(identifiant)) {
+                String sel = UtilitaireSecuriteMessagerie.genererSelAleatoireEnBase64();
+                String motDePasseHache = UtilitaireSecuriteMessagerie.hacherMotDePasse(motDePasseClair, sel);
+
+                Utilisateur nouvelUtilisateur = new Utilisateur();
+                nouvelUtilisateur.setIdentifiant(identifiant);
+                nouvelUtilisateur.setMotDePasseHache(motDePasseHache);
+                nouvelUtilisateur.setSelMotDePasse(sel);
+                nouvelUtilisateur.setNomComplet(nomComplet);
+                nouvelUtilisateur.setRole(role);
+                nouvelUtilisateur.setStatutCompte(statut);
+                nouvelUtilisateur.setDateCreationCompte(LocalDateTime.now());
+
+                utilisateurDAO.creer(nouvelUtilisateur);
+                journal.info("Utilisateur par défaut '{}' ({}) créé avec succès.", identifiant, role.name());
+            } else {
+                journal.debug("L'utilisateur par défaut '{}' existe déjà.", identifiant);
+            }
+        } catch (Exception e) {
+            journal.error("Erreur lors de la tentative de création de l'utilisateur par défaut '{}': {}", identifiant, e.getMessage(), e);
+        }
     }
 }

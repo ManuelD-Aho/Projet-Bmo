@@ -5,7 +5,7 @@ import akandan.bahou.kassy.client.service.ServiceCommunicationServeur;
 import akandan.bahou.kassy.client.service.ServiceSessionUtilisateur;
 import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
 import akandan.bahou.kassy.commun.util.ExceptionValidation;
-import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur; // Pour la validation client-side
+import akandan.bahou.kassy.commun.util.ValidateurEntreeUtilisateur;
 import java.util.ResourceBundle;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -52,8 +52,23 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
         this.serviceSessionUtilisateur = serviceSess;
         this.paquetRessourcesI18n = paquetRessources;
 
-        // Écouteur pour les messages d'erreur d'authentification/inscription
-        serviceComm.dernierMessageErreurAuthProperty().addListener((obs, ancienMessage, nouveauMessage) -> {
+        // Les listeners et l'initialisation des contrôles doivent être ici,
+        // car les services sont maintenant disponibles.
+        configurerListenersEtControles();
+        basculerVersPanneauConnexion(); // État initial
+    }
+
+    @FXML
+    private void initialize() {
+        // Laisser cette méthode vide ou pour des initialisations qui ne dépendent PAS des services.
+        // La logique principale d'initialisation est maintenant dans initialiserDonneesEtServices.
+    }
+
+    private void configurerListenersEtControles() {
+        etiquetteMessageErreurConnexion.setText("");
+        etiquetteMessageErreurInscription.setText("");
+
+        serviceCommunicationServeur.dernierMessageErreurAuthProperty().addListener((obs, ancienMessage, nouveauMessage) -> {
             if (nouveauMessage != null && !nouveauMessage.isEmpty()) {
                 Platform.runLater(() -> {
                     if (panneauConnexion.isVisible()) {
@@ -67,8 +82,7 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
             }
         });
 
-        // Écouteur pour la réussite de la connexion
-        serviceSess.estUtilisateurConnecteProperty().addListener((obs, etaitConnecte, estConnecteMaintenant) -> {
+        serviceSessionUtilisateur.estUtilisateurConnecteProperty().addListener((obs, etaitConnecte, estConnecteMaintenant) -> {
             if (estConnecteMaintenant) {
                 Platform.runLater(() -> {
                     viderChamps();
@@ -77,14 +91,13 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
             }
         });
 
-        // Écouteur pour l'état de la connexion au serveur
-        serviceComm.etatConnexionServeurProperty().addListener((obs, etaitCoServeur, estCoServeurMaintenant) -> {
+        serviceCommunicationServeur.etatConnexionServeurProperty().addListener((obs, etaitCoServeur, estCoServeurMaintenant) -> {
             Platform.runLater(() -> {
                 boolean desactiverSaisie = !estCoServeurMaintenant;
                 activerDesactiverControlesConnexion(desactiverSaisie);
                 activerDesactiverControlesInscription(desactiverSaisie);
 
-                if(desactiverSaisie && panneauConnexion.isVisible() && (etiquetteMessageErreurConnexion.getText() == null || etiquetteMessageErreurConnexion.getText().isEmpty())){
+                if(desactiverSaisie && panneauConnexion.isVisible() && (etiquetteMessageErreurConnexion.getText() == null || etiquetteMessageErreurConnexion.getText().isEmpty() || etiquetteMessageErreurConnexion.getText().equals(paquetRessourcesI18n.getString("status.connecting")))){
                     etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
                 } else if (!desactiverSaisie && panneauConnexion.isVisible()){
                     if (etiquetteMessageErreurConnexion.getText().equals(paquetRessourcesI18n.getString("error.server.unavailable"))) {
@@ -100,19 +113,15 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
                 }
             });
         });
-        // État initial des contrôles basé sur la connexion serveur
-        Platform.runLater(() -> {
-            boolean desactiverSaisieInitiale = !serviceCommunicationServeur.estActuellementConnecte();
-            activerDesactiverControlesConnexion(desactiverSaisieInitiale);
-            if(desactiverSaisieInitiale){
-                etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
-            }
-        });
-    }
 
-    @FXML
-    private void initialize() {
-        basculerVersPanneauConnexion(); // Assurer l'état initial correct
+        // État initial des contrôles basé sur la connexion serveur
+        boolean desactiverSaisieInitiale = !serviceCommunicationServeur.estActuellementConnecte();
+        activerDesactiverControlesConnexion(desactiverSaisieInitiale);
+        if(desactiverSaisieInitiale){
+            etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
+        } else {
+            etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("status.connecting")); // Message d'attente
+        }
     }
 
     @FXML
@@ -128,7 +137,7 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
             return;
         }
 
-        etiquetteMessageErreurConnexion.setText("");
+        etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("status.connecting"));
         activerDesactiverControlesConnexion(true);
         serviceCommunicationServeur.envoyerRequeteConnexion(identifiant, motDePasse);
         journal.info("Tentative de connexion pour l'utilisateur : {}", identifiant);
@@ -163,7 +172,7 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
             return;
         }
 
-        etiquetteMessageErreurInscription.setText("");
+        etiquetteMessageErreurInscription.setText(paquetRessourcesI18n.getString("status.registering"));
         activerDesactiverControlesInscription(true);
         serviceCommunicationServeur.envoyerRequeteInscription(identifiant, motDePasse, nomComplet);
         journal.info("Tentative d'inscription pour l'utilisateur : {}", identifiant);
@@ -203,6 +212,8 @@ public class ControleurFenetreConnexion implements ControleurAvecInitialisation 
         activerDesactiverControlesConnexion(desactiverSaisie);
         if(desactiverSaisie){
             etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("error.server.unavailable"));
+        } else {
+            etiquetteMessageErreurConnexion.setText(paquetRessourcesI18n.getString("status.connecting"));
         }
     }
 

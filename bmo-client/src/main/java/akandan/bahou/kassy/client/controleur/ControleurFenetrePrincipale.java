@@ -49,9 +49,19 @@ public class ControleurFenetrePrincipale implements ControleurAvecInitialisation
             serviceSess.estUtilisateurConnecteProperty().addListener((obs, ancien, nouveau) -> {
                 mettreAJourStatutApplication(nouveau);
                 mettreAJourTextesEtVisibiliteMenus();
+                // Si l'utilisateur vient de se connecter, naviguer vers le tableau de bord
+                // Si l'utilisateur vient de se déconnecter, naviguer vers la connexion
+                if (nouveau && gestionnaireNavigation != null) {
+                    gestionnaireNavigation.afficherTableauDeBord();
+                } else if (!nouveau && gestionnaireNavigation != null) {
+                    gestionnaireNavigation.afficherVueConnexion();
+                }
             });
-            // État initial au cas où l'écouteur n'est pas déclenché immédiatement
             mettreAJourStatutApplication(serviceSess.estConnecte());
+            if (!serviceSess.estConnecte() && gestionnaireNavigation != null) {
+                // Initialement, si pas connecté, on est sur la vue de connexion chargée par AppPrincipale via GestionnaireNavigation
+                // gestionnaireNavigation.afficherVueConnexion(); // Redondant si AppPrincipale le fait via GestionnaireNav
+            }
         }
         if (serviceComm != null) {
             serviceComm.etatConnexionServeurProperty().addListener((obs, etaitCo, estCoMaintenant) -> {
@@ -78,10 +88,11 @@ public class ControleurFenetrePrincipale implements ControleurAvecInitialisation
 
         if (menuItemNavigationTableauDeBord != null) {
             menuItemNavigationTableauDeBord.setVisible(estConnecte);
-            // MenuItem n'a pas setManaged, la visibilité suffit.
+            menuItemNavigationTableauDeBord.setDisable(!estConnecte);
         }
         if (menuItemNavigationAdminUtilisateurs != null) {
             menuItemNavigationAdminUtilisateurs.setVisible(estConnecte && estAdmin);
+            menuItemNavigationAdminUtilisateurs.setDisable(!(estConnecte && estAdmin));
         }
     }
 
@@ -96,7 +107,7 @@ public class ControleurFenetrePrincipale implements ControleurAvecInitialisation
     @FXML
     private void actionQuitterApplication(ActionEvent evenement) {
         if (serviceCommunicationServeur != null) {
-            serviceCommunicationServeur.envoyerRequeteDeconnexion(); // Notifier le serveur
+            serviceCommunicationServeur.envoyerRequeteDeconnexion();
             serviceCommunicationServeur.deconnecterDuServeur();
         }
         Platform.exit();
@@ -113,8 +124,6 @@ public class ControleurFenetrePrincipale implements ControleurAvecInitialisation
     private void actionNaviguerVersTableauDeBord(ActionEvent evenement) {
         if (gestionnaireNavigation != null && serviceSessionUtilisateur != null && serviceSessionUtilisateur.estConnecte()) {
             gestionnaireNavigation.afficherTableauDeBord();
-        } else if (gestionnaireNavigation != null) { // Si pas connecté, retour à la connexion
-            gestionnaireNavigation.afficherVueConnexion();
         }
     }
 
@@ -122,10 +131,10 @@ public class ControleurFenetrePrincipale implements ControleurAvecInitialisation
     private void actionNaviguerVersAdminUtilisateurs(ActionEvent evenement) {
         if (gestionnaireNavigation != null && serviceSessionUtilisateur != null && serviceSessionUtilisateur.aRole(RoleUtilisateur.ADMINISTRATEUR)) {
             gestionnaireNavigation.afficherVueAdministrationUtilisateurs();
-        } else {
+        } else if (paquetRessourcesI18n != null) { // Assurer que paquetRessourcesI18n n'est pas nul
             AlertesUtilisateur.afficherErreur(
-                    (paquetRessourcesI18n != null && paquetRessourcesI18n.containsKey("error.access.denied.title")) ? paquetRessourcesI18n.getString("error.access.denied.title") : "Accès Refusé",
-                    (paquetRessourcesI18n != null && paquetRessourcesI18n.containsKey("error.admin.access.required")) ? paquetRessourcesI18n.getString("error.admin.access.required") : "Droits administrateur requis."
+                    paquetRessourcesI18n.getString("error.access.denied.title"),
+                    paquetRessourcesI18n.getString("error.admin.access.required")
             );
         }
     }

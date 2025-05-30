@@ -1,0 +1,22 @@
+/* Exemple pour style-bmo.css */
+.root-pane {
+    -fx-font-family: "Arial"; /* Ou la police de votre choix */
+    -fx-background-color: #f4f4f4;
+}
+
+.etiquette-erreur {
+    -fx-text-fill: #D8000C; /* Rouge pour les erreurs */
+    /* -fx-font-weight: bold; */
+}
+
+.button {
+    -fx-background-color: #4CAF50; /* Vert exemple */
+    -fx-text-fill: white;
+    -fx-padding: 8 15 8 15;
+}
+
+.button:hover {
+    -fx-background-color: #45a049;
+}
+
+/* Ajoutez d'autres styles selon vos besoins */

@@ -24,21 +24,20 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-// javafx.scene.web.WebView; // Si vous l'utilisez pour le partage d'écran/vidéo
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 
 public class ControleurSalleReunion implements ControleurAvecInitialisation {
 
     @FXML private Label etiquetteTitreReunionSalle;
-    @FXML private Label etiquetteDescriptionReunionSalle; // Optionnel, si existe dans FXML
+    @FXML private Label etiquetteDescriptionReunionSalle;
     @FXML private ListView<String> listViewParticipants;
     @FXML private TextArea textAreaChatHistorique;
     @FXML private TextField champSaisieMessageChat;
     @FXML private Button boutonEnvoyerMessageChat;
     @FXML private Button boutonQuitterReunion;
     @FXML private Button boutonLeverMain;
-    // @FXML private Button boutonPartageEcran; // Conserver si FXML l'a, mais logique non implémentée
-    // @FXML private WebView webViewContenuPrincipal; // Idem
 
     private GestionnaireNavigation gestionnaireNavigation;
     private ServiceCommunicationServeur serviceCommunicationServeur;
@@ -51,7 +50,6 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
     private static final Logger journal = EnregistreurEvenementsBMO.getLogger(ControleurSalleReunion.class);
     private final DateTimeFormatter formateurHeureChat = DateTimeFormatter.ofPattern("HH:mm:ss");
     private boolean mainLevee = false;
-
 
     public ControleurSalleReunion() {
     }
@@ -76,16 +74,11 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
         }
 
         configurerBindingsEtListeners();
-        mettreAJourInformationsReunion(this.detailsReunionActuelle);
+        mettreAJourInformationsReunionUI(this.detailsReunionActuelle);
         chargerDonneesInitialesSalle();
     }
 
     private void configurerBindingsEtListeners() {
-        etiquetteTitreReunionSalle.setText(detailsReunionActuelle.getTitre());
-        if (etiquetteDescriptionReunionSalle != null) {
-            etiquetteDescriptionReunionSalle.setText(detailsReunionActuelle.getDescription());
-        }
-
         serviceCommunicationServeur.dernierMessageChatRecuProperty().addListener((obs, anc, nouv) -> {
             if (nouv != null && detailsReunionActuelle != null && nouv.getIdReunion() == detailsReunionActuelle.getIdReunion()) {
                 afficherNouveauMessageChat(nouv);
@@ -101,22 +94,38 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
             }
         });
 
-        serviceCommunicationServeur.notificationUtilisateurRejointProperty().addListener((obs, anc, nouv) -> {
-            if (nouv != null && detailsReunionActuelle != null /*&& nouv.getIdReunion() == detailsReunionActuelle.getIdReunion() - si le DTO de notif contient idReunion*/) {
-                ajouterParticipantVisuellement(nouv);
-                afficherMessageSysteme(String.format(paquetRessourcesI18n.getString("meeting.user.joined"), nouv.getNomComplet()));
+        serviceCommunicationServeur.notificationUtilisateurRejointProperty().addListener((obs, anc, payloadNotification) -> {
+            if (payloadNotification != null && detailsReunionActuelle != null) {
+                try {
+                    long idReunionNotif = payloadNotification.optLong("idReunion", -1);
+                    if (idReunionNotif == detailsReunionActuelle.getIdReunion() && payloadNotification.has("utilisateur")) {
+                        DonneesUtilisateurDTO utilisateurRejoint = DonneesUtilisateurDTO.fromJson(payloadNotification.getJSONObject("utilisateur").toString());
+                        ajouterParticipantVisuellement(utilisateurRejoint);
+                        afficherMessageSysteme(String.format(paquetRessourcesI18n.getString("meeting.user.joined"), utilisateurRejoint.getNomComplet()));
+                    }
+                } catch (JSONException e) {
+                    journal.error("Erreur parsing JSON pour notification UTILISATEUR_REJOINT_REUNION: {}", e.getMessage());
+                }
             }
         });
 
-        serviceCommunicationServeur.notificationUtilisateurQuitteProperty().addListener((obs, anc, nouv) -> {
-            if (nouv != null && detailsReunionActuelle != null /*&& nouv.getIdReunion() == detailsReunionActuelle.getIdReunion()*/) {
-                retirerParticipantVisuellement(nouv);
-                afficherMessageSysteme(String.format(paquetRessourcesI18n.getString("meeting.user.left"), nouv.getNomComplet()));
+        serviceCommunicationServeur.notificationUtilisateurQuitteProperty().addListener((obs, anc, payloadNotification) -> {
+            if (payloadNotification != null && detailsReunionActuelle != null) {
+                try {
+                    long idReunionNotif = payloadNotification.optLong("idReunion", -1);
+                    if (idReunionNotif == detailsReunionActuelle.getIdReunion() && payloadNotification.has("utilisateur")) {
+                        DonneesUtilisateurDTO utilisateurQuitte = DonneesUtilisateurDTO.fromJson(payloadNotification.getJSONObject("utilisateur").toString());
+                        retirerParticipantVisuellement(utilisateurQuitte);
+                        afficherMessageSysteme(String.format(paquetRessourcesI18n.getString("meeting.user.left"), utilisateurQuitte.getNomComplet()));
+                    }
+                } catch (JSONException e) {
+                    journal.error("Erreur parsing JSON pour notification UTILISATEUR_QUITTE_REUNION: {}", e.getMessage());
+                }
             }
         });
 
-        serviceCommunicationServeur.notificationReunionClotureeIdProperty().addListener((obs, ancienId, nouveauId) -> {
-            if (nouveauId != null && detailsReunionActuelle != null && nouveauId.longValue() == detailsReunionActuelle.getIdReunion()) {
+        serviceCommunicationServeur.notificationReunionClotureeIdProperty().addListener((obs, ancienId, nouveauIdObj) -> {
+            if (nouveauIdObj != null && detailsReunionActuelle != null && nouveauIdObj.longValue() == detailsReunionActuelle.getIdReunion()) {
                 Platform.runLater(() -> {
                     AlertesUtilisateur.afficherInformation(
                             paquetRessourcesI18n.getString("meeting.status.changed.title"),
@@ -127,14 +136,10 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
             }
         });
 
-
         textAreaChatHistorique.setEditable(false);
         textAreaChatHistorique.setWrapText(true);
         listViewParticipants.setItems(listeObservableNomsParticipants);
-
         boutonLeverMain.setText(paquetRessourcesI18n.getString("button.raise.hand"));
-        // if(boutonPartageEcran != null) { boutonPartageEcran.setDisable(true); boutonPartageEcran.setVisible(false); }
-        // if(webViewContenuPrincipal != null) { webViewContenuPrincipal.setVisible(false); }
     }
 
     private void ajouterParticipantVisuellement(DonneesUtilisateurDTO utilisateur) {
@@ -142,7 +147,7 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
             boolean existeDeja = listeCompleteParticipantsDTO.stream().anyMatch(p -> p.getIdUtilisateur() == utilisateur.getIdUtilisateur());
             if (!existeDeja) {
                 listeCompleteParticipantsDTO.add(utilisateur);
-            } else { // Mettre à jour si déjà présent (ex: reconnexion)
+            } else {
                 listeCompleteParticipantsDTO.removeIf(p -> p.getIdUtilisateur() == utilisateur.getIdUtilisateur());
                 listeCompleteParticipantsDTO.add(utilisateur);
             }
@@ -165,10 +170,8 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
         );
     }
 
-
     private void chargerDonneesInitialesSalle() {
         if (detailsReunionActuelle != null) {
-            // La liste des participants est maintenant dans detailsReunionActuelle.getParticipantsDTO()
             if (detailsReunionActuelle.getParticipantsDTO() != null) {
                 listeCompleteParticipantsDTO.setAll(detailsReunionActuelle.getParticipantsDTO());
                 mettreAJourListeNomsParticipants();
@@ -177,8 +180,8 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
         }
     }
 
-    private void mettreAJourInformationsReunion(DetailsReunionDTO nouveauxDetails) {
-        this.detailsReunionActuelle = nouveauxDetails; // Mettre à jour la référence locale
+    private void mettreAJourInformationsReunionUI(DetailsReunionDTO nouveauxDetails) {
+        this.detailsReunionActuelle = nouveauxDetails;
         Platform.runLater(() -> {
             etiquetteTitreReunionSalle.setText(nouveauxDetails.getTitre());
             if (etiquetteDescriptionReunionSalle != null) {
@@ -189,7 +192,7 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
                 mettreAJourListeNomsParticipants();
             }
 
-            if (nouveauxDetails.getStatutReunion() == StatutReunion.CLOTUREE || nouveauxDetails.getStatutReunion() == StatutReunion.ANNULEE) {
+            if (nouveauxDetails.getStatutReunion() == StatutReunion.CLOTUREE || nouveauxDetails.getStatutReunion() == StatutReunion.ANNULEE ) {
                 AlertesUtilisateur.afficherInformation(
                         paquetRessourcesI18n.getString("meeting.status.changed.title"),
                         paquetRessourcesI18n.getString("meeting.status.closed_or_cancelled")
@@ -198,7 +201,6 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
             }
         });
     }
-
 
     @FXML
     private void initialize() {
@@ -214,9 +216,9 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
                 MessageChatDTO messageDTO = new MessageChatDTO(
                         detailsReunionActuelle.getIdReunion(),
                         utilisateurActuel.getIdUtilisateur(),
-                        utilisateurActuel.getNomComplet(), // Le nom est déjà connu côté client
+                        utilisateurActuel.getNomComplet(),
                         contenuMessage,
-                        LocalDateTime.now() // Horodatage client, le serveur devrait utiliser le sien
+                        LocalDateTime.now()
                 );
                 serviceCommunicationServeur.envoyerMessageChat(messageDTO);
                 champSaisieMessageChat.clear();
@@ -238,12 +240,9 @@ public class ControleurSalleReunion implements ControleurAvecInitialisation {
     @FXML
     private void actionLeverMain(ActionEvent evenement) {
         if (detailsReunionActuelle != null && serviceSessionUtilisateur.estConnecte()) {
-            mainLevee = !mainLevee; // Basculer l'état
-            // La logique d'envoyer une requête au serveur pour "lever la main" / "baisser la main" irait ici.
-            // serviceCommunicationServeur.envoyerRequeteLeverMain(detailsReunionActuelle.getIdReunion(), mainLevee);
+            mainLevee = !mainLevee;
             journal.info("Action 'Lever/Baisser la main' cliquée. État : {}", mainLevee ? "levée" : "baissée");
             boutonLeverMain.setText(mainLevee ? paquetRessourcesI18n.getString("button.lower.hand") : paquetRessourcesI18n.getString("button.raise.hand"));
-            // Une notification visuelle pourrait être ajoutée à côté du nom du participant.
         }
     }
 

@@ -16,7 +16,7 @@ public final class ConfigurateurServeur {
 
     private ConfigurateurServeur() {
         this.proprietesConfiguration = new Properties();
-        chargerFichierDeProprietes();
+        chargerFichiersEtVariables();
     }
 
     public static ConfigurateurServeur obtenirInstance() {
@@ -30,19 +30,42 @@ public final class ConfigurateurServeur {
         return instanceUnique;
     }
 
-    private void chargerFichierDeProprietes() {
+    private void chargerFichiersEtVariables() {
+        // 1. Charger depuis application.properties (valeurs par défaut)
         try (InputStream lInputStream = ConfigurateurServeur.class.getClassLoader().getResourceAsStream(NOM_FICHIER_PROPRIETES_APPLICATION)) {
-            if (lInputStream == null) {
-                journal.error("Le fichier de propriétés '{}' est introuvable dans le classpath.", NOM_FICHIER_PROPRIETES_APPLICATION);
-                throw new RuntimeException("Fichier de configuration " + NOM_FICHIER_PROPRIETES_APPLICATION + " introuvable.");
+            if (lInputStream != null) {
+                this.proprietesConfiguration.load(lInputStream);
+                journal.info("Propriétés de configuration initiales chargées depuis '{}'.", NOM_FICHIER_PROPRIETES_APPLICATION);
+            } else {
+                journal.warn("Le fichier de propriétés '{}' est introuvable dans le classpath. Utilisation des valeurs par défaut et des variables d'environnement uniquement.", NOM_FICHIER_PROPRIETES_APPLICATION);
             }
-            this.proprietesConfiguration.load(lInputStream);
-            journal.info("Les propriétés de configuration ont été chargées depuis '{}'.", NOM_FICHIER_PROPRIETES_APPLICATION);
         } catch (IOException e) {
-            journal.error("Erreur d'entrée/sortie lors du chargement du fichier de propriétés '{}'.", NOM_FICHIER_PROPRIETES_APPLICATION, e);
-            throw new RuntimeException("Erreur lors du chargement du fichier de configuration " + NOM_FICHIER_PROPRIETES_APPLICATION + ".", e);
+            journal.error("Erreur E/S lors du chargement de '{}'.", NOM_FICHIER_PROPRIETES_APPLICATION, e);
+            // Ne pas lever d'exception ici, les variables d'env peuvent surcharger
+        }
+
+        // 2. Surcharger avec les variables d'environnement (plus prioritaires)
+        //    Les clés dans application.properties doivent correspondre aux noms des variables d'environnement
+        //    ou vous devez avoir un mapping.
+        //    Exemple: Si docker-compose.yml a BMO_DB_URL, application.properties devrait avoir bmo.db.url
+        //    et nous mappons BMO_DB_URL (variable d'env) à bmo.db.url (clé de propriété).
+
+        surchargerDepuisVariableEnv("BMO_DB_URL", "bmo.db.url");
+        surchargerDepuisVariableEnv("BMO_DB_UTILISATEUR", "bmo.db.utilisateur");
+        surchargerDepuisVariableEnv("BMO_DB_MOTDEPASSE", "bmo.db.motdepasse");
+        surchargerDepuisVariableEnv("BMO_SERVEUR_PORT", "bmo.serveur.port");
+        surchargerDepuisVariableEnv("BMO_POOLTHREADS_TAILLEMAXIMALE", "bmo.poolthreads.taillemaximale");
+        // Ajoutez d'autres mappings ici si nécessaire
+    }
+
+    private void surchargerDepuisVariableEnv(String nomVariableEnv, String clePropriete) {
+        String valeurEnv = System.getenv(nomVariableEnv);
+        if (valeurEnv != null && !valeurEnv.isEmpty()) {
+            this.proprietesConfiguration.setProperty(clePropriete, valeurEnv);
+            journal.info("Propriété '{}' surchargée par la variable d'environnement '{}'.", clePropriete, nomVariableEnv);
         }
     }
+
 
     public String recupererProprieteChaine(String cleDePropriete) {
         return this.proprietesConfiguration.getProperty(cleDePropriete);
