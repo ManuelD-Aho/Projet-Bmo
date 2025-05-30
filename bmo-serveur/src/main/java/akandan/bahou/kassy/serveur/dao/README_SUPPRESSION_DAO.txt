@@ -1,0 +1,1 @@
+Ce dossier ne contient plus de DAO ni de gestionnaire de connexion à la base de données. Toute la logique de persistance a été supprimée conformément à la migration vers un fonctionnement 100% en mémoire.

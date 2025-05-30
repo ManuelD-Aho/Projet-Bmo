@@ -1,15 +1,6 @@
 package akandan.bahou.kassy.serveur.noyau;
 
 import akandan.bahou.kassy.serveur.configuration.ConfigurateurServeur;
-import akandan.bahou.kassy.serveur.dao.GestionnaireConnexionBaseDeDonnees;
-import akandan.bahou.kassy.serveur.dao.InterfaceMessageChatDAO;
-import akandan.bahou.kassy.serveur.dao.InterfaceParticipationReunionDAO;
-import akandan.bahou.kassy.serveur.dao.InterfaceReunionDAO;
-import akandan.bahou.kassy.serveur.dao.InterfaceUtilisateurDAO;
-import akandan.bahou.kassy.serveur.dao.MessageChatDAOImpl;
-import akandan.bahou.kassy.serveur.dao.ParticipationReunionDAOImpl;
-import akandan.bahou.kassy.serveur.dao.ReunionDAOImpl;
-import akandan.bahou.kassy.serveur.dao.UtilisateurDAOImpl;
 import akandan.bahou.kassy.serveur.service.ServiceAdministration;
 import akandan.bahou.kassy.serveur.service.ServiceAuthentification;
 import akandan.bahou.kassy.serveur.service.ServiceCommunicationReunion;
@@ -29,11 +20,6 @@ public class ServeurPrincipalBMO {
     private final int portEcoute;
     private final ConfigurateurServeur configurateurServeur;
     private final PoolThreadsServeur poolDeThreads;
-    private final GestionnaireConnexionBaseDeDonnees gestionnaireDeConnexionsBD;
-    private final InterfaceUtilisateurDAO utilisateurDAO;
-    private final InterfaceReunionDAO reunionDAO;
-    private final InterfaceMessageChatDAO messageChatDAO;
-    private final InterfaceParticipationReunionDAO participationReunionDAO;
     private final ServiceAuthentification serviceAuthentification;
     private final ServiceGestionUtilisateurs serviceGestionUtilisateurs;
     private final ServiceGestionReunions serviceGestionReunions;
@@ -47,18 +33,13 @@ public class ServeurPrincipalBMO {
         this.configurateurServeur = ConfigurateurServeur.obtenirInstance();
         this.portEcoute = this.configurateurServeur.recupererProprieteEntier("bmo.serveur.port", 5000);
         this.poolDeThreads = new PoolThreadsServeur(this.configurateurServeur);
-        this.gestionnaireDeConnexionsBD = new GestionnaireConnexionBaseDeDonnees(this.configurateurServeur);
 
-        this.utilisateurDAO = new UtilisateurDAOImpl(this.gestionnaireDeConnexionsBD);
-        this.reunionDAO = new ReunionDAOImpl(this.gestionnaireDeConnexionsBD);
-        this.messageChatDAO = new MessageChatDAOImpl(this.gestionnaireDeConnexionsBD);
-        this.participationReunionDAO = new ParticipationReunionDAOImpl(this.gestionnaireDeConnexionsBD);
-
-        this.serviceAuthentification = new ServiceAuthentification(this.utilisateurDAO);
-        this.serviceGestionUtilisateurs = new ServiceGestionUtilisateurs(this.utilisateurDAO);
-        this.serviceCommunicationReunion = new ServiceCommunicationReunion(this.messageChatDAO, this.participationReunionDAO, this.utilisateurDAO);
-        this.serviceGestionReunions = new ServiceGestionReunions(this.reunionDAO, this.participationReunionDAO, this.utilisateurDAO, this.serviceCommunicationReunion);
-        this.serviceAdministration = new ServiceAdministration(this.utilisateurDAO, this.configurateurServeur);
+        // Initialisation des services en mémoire uniquement (aucun DAO, aucune base de données)
+        this.serviceAuthentification = new ServiceAuthentification();
+        this.serviceGestionUtilisateurs = new ServiceGestionUtilisateurs();
+        this.serviceCommunicationReunion = new ServiceCommunicationReunion();
+        this.serviceGestionReunions = new ServiceGestionReunions(this.serviceCommunicationReunion);
+        this.serviceAdministration = new ServiceAdministration(this.configurateurServeur);
 
         try {
             this.serviceAdministration.initialiserUtilisateursParDefautSiNecessaire();
@@ -66,7 +47,13 @@ public class ServeurPrincipalBMO {
             journal.error("Erreur lors de l'initialisation des utilisateurs par défaut. Le serveur continuera sans eux.", e);
         }
 
-        this.analyseurDeRequetesClient = new AnalyseurRequeteClient(this.serviceAuthentification, this.serviceGestionUtilisateurs, this.serviceGestionReunions, this.serviceCommunicationReunion, this.serviceAdministration);
+        this.analyseurDeRequetesClient = new AnalyseurRequeteClient(
+            this.serviceAuthentification,
+            this.serviceGestionUtilisateurs,
+            this.serviceGestionReunions,
+            this.serviceCommunicationReunion,
+            this.serviceAdministration
+        );
         journal.info("Serveur BMO initialisé. Prêt à démarrer sur le port {}.", this.portEcoute);
     }
 
