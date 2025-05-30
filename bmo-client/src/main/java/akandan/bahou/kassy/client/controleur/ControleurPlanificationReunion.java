@@ -2,7 +2,6 @@ package akandan.bahou.kassy.client.controleur;
 
 import akandan.bahou.kassy.client.coeur.GestionnaireNavigation;
 import akandan.bahou.kassy.client.service.ServiceCommunicationServeur;
-import akandan.bahou.kassy.client.service.ServiceSessionUtilisateur;
 import akandan.bahou.kassy.client.util.AlertesUtilisateur;
 import akandan.bahou.kassy.commun.dto.DetailsReunionDTO;
 import akandan.bahou.kassy.commun.modele.TypeReunion;
@@ -52,7 +51,6 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
 
     private GestionnaireNavigation gestionnaireNavigation;
     private ServiceCommunicationServeur serviceCommunicationServeur;
-    private ServiceSessionUtilisateur serviceSessionUtilisateur;
     private ResourceBundle paquetRessourcesI18n;
     private DetailsReunionDTO reunionEnCoursModification;
     private static final Logger journal = EnregistreurEvenementsBMO.getLogger(ControleurPlanificationReunion.class);
@@ -62,10 +60,9 @@ public class ControleurPlanificationReunion implements ControleurAvecInitialisat
     }
 
     @Override
-    public void initialiserDonneesEtServices(GestionnaireNavigation gestionnaireNav, ServiceCommunicationServeur serviceComm, ServiceSessionUtilisateur serviceSess, ResourceBundle paquetRessources, Object... donnees) {
+    public void initialiserDonneesEtServices(GestionnaireNavigation gestionnaireNav, ServiceCommunicationServeur serviceComm, ResourceBundle paquetRessources, Object... donnees) {
         this.gestionnaireNavigation = gestionnaireNav;
         this.serviceCommunicationServeur = serviceComm;
-        this.serviceSessionUtilisateur = serviceSess;
         this.paquetRessourcesI18n = paquetRessources;
 
         if (donnees != null && donnees.length > 0 && donnees[0] instanceof DetailsReunionDTO) {

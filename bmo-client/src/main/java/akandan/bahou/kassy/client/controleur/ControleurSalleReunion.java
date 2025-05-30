@@ -11,7 +11,6 @@ import akandan.bahou.kassy.commun.modele.StatutReunion;
 import akandan.bahou.kassy.commun.util.EnregistreurEvenementsBMO;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.ResourceBundle;
 import java.util.stream.Collectors;
 import javafx.application.Platform;
@@ -25,7 +24,6 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 
 public class ControleurSalleReunion implements ControleurAvecInitialisation {

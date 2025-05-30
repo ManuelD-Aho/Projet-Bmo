@@ -42,7 +42,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=constructeur_bmo_client /app_projet_bmo/bmo-client/target/bmo-client-*.jar app-bmo-client.jar
-CMD ["java", "-Dprism.lcdtext=false", "-Dprism.text=lcd", "--module-path", "${JAVAFX_HOME}/lib", "--add-modules", "javafx.controls,javafx.fxml,javafx.graphics,javafx.media", "-jar", "app-bmo-client.jar"]
+
+# Script d'entrée pour résoudre les variables d'environnement
+COPY bmo-client/docker-entrypoint.sh /app_client/docker-entrypoint.sh
+RUN chmod +x /app_client/docker-entrypoint.sh
+
+CMD ["/app_client/docker-entrypoint.sh"]
 LABEL maintainer="VotreNomOuPseudo"
 LABEL version="1.0"
 LABEL description="Image Docker pour l'application client BMO (JavaFX)."

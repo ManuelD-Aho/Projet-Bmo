@@ -9,7 +9,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -39,6 +38,22 @@ public class DetailsReunionDTO implements Serializable {
         this.statutReunion = StatutReunion.PLANIFIEE;
         this.typeReunion = TypeReunion.STANDARD;
         this.dateCreationReunion = LocalDateTime.now();
+    }
+
+    public DetailsReunionDTO(long idReunion, String titre, String description, LocalDateTime dateHeureDebut, int dureeEstimeeMinutes, TypeReunion typeReunion, StatutReunion statutReunion, long idOrganisateur, String nomOrganisateur, String motDePasseOptionnelValeur, List<DonneesUtilisateurDTO> participantsDTO, LocalDateTime dateCreationReunion) {
+        this.idReunion = idReunion;
+        this.titre = titre;
+        this.description = description;
+        this.dateHeureDebut = dateHeureDebut;
+        this.dureeEstimeeMinutes = dureeEstimeeMinutes;
+        this.typeReunion = typeReunion;
+        this.statutReunion = statutReunion;
+        this.idOrganisateur = idOrganisateur;
+        this.nomOrganisateur = nomOrganisateur;
+        this.motDePasseOptionnelValeur = motDePasseOptionnelValeur;
+        this.participantsDTO = (participantsDTO != null) ? participantsDTO : new ArrayList<>();
+        this.dateCreationReunion = dateCreationReunion;
+        this.nombreParticipants = (participantsDTO != null) ? participantsDTO.size() : 0;
     }
 
     public long getIdReunion() {

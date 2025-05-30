@@ -10,6 +10,16 @@ SET time_zone = "+00:00";
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8mb4 */;
 
+-- Création de l'utilisateur applicatif pour BMO (si il n'existe pas déjà)
+-- Cet utilisateur sera utilisé par l'application Java pour se connecter à la base de données
+CREATE USER IF NOT EXISTS 'bmo_utilisateur_app'@'%' IDENTIFIED BY 'MotDePasseUtilisateurAppFort!';
+
+-- Attribution de tous les privilèges sur la base de données BMO à l'utilisateur applicatif
+GRANT ALL PRIVILEGES ON bmo_base_de_donnees.* TO 'bmo_utilisateur_app'@'%';
+
+-- Application des modifications de privilèges
+FLUSH PRIVILEGES;
+
 --
 -- Suppression des tables existantes pour un nouveau départ (ordre important à cause des FK)
 --
